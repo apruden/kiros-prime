@@ -1,2 +1,4 @@
-# kiros-prime
-kiros prime server
+kiros-wiki
+==========
+
+Wiki service
