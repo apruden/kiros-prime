@@ -4,42 +4,40 @@ import scala.concurrent.Future
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.util.Try
 import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 import com.sksamuel.elastic4s.ElasticClient
 import com.sksamuel.elastic4s.ElasticDsl._
 import org.elasticsearch.action.get.GetResponse
 import com.monolito.kiros.prime._
 import com.monolito.kiros.prime.model._
 import java.time.Instant
+import com.sksamuel.elastic4s.source.DocumentMap
 
-class EsCommentRepository extends EsRepository[Comment] with CommentRepository {
-  import EsRepository._
-
-  val indexName = "wiki"
-  val docType = "comments"
-  implicit val mapper: MapConvert[Comment] = new MapConvert[Comment] {
-    def conv(values: Map[String, Any]): Comment = Comment(
-      values.get("commentId").get.toString,
-      values.get("targetId").get.toString,
-      values.get("content").get.toString,
-      mapAsScalaMap(values.get("postedBy").get.asInstanceOf[java.util.Map[String, Any]]).toMap.convert[User],
-      Instant.parse(values.get("posted").get.toString),
-      collectionAsScalaIterable(values.get("attachments").get.asInstanceOf[java.util.List[Map[String, Any]]]).toList.map {_.convert[Attachment]}
-    )
-  }
-
-  def findByTarget(targetId: String): Future[List[Comment]] = {
-    for {
-      r <- client.execute { search in indexName -> docType query termQuery("targetId", targetId)}
-      c <- Future.successful { r.getHits.getHits }
-      x <- Future.successful { c.map(y => y.getSource).toList }
-    } yield x.map(z => z.toMap.convert[Comment])
-  }
-}
 
 class EsArticleRepository extends EsRepository[Article] with ArticleRepository {
+  import EsRepository._
   import com.monolito.kiros.prime.data._
 
-  val indexName = "wiki"
-  val docType = "articles"
+  val indexName = "prime"
+  val docType = "documents"
+  val typeId = "article"
+
   implicit val mapper = mapperArticle
+
+  def updateComment(articleId: String, comment: Comment): Future[Try[Unit]] =
+    for {
+      r <- client.execute(update id articleId in indexName->docType script "ctx._source.comments = (ctx._source.comments ?: []) + comment" params (Map("comment" -> comment.asInstanceOf[DocumentMap].map.asJava)))
+    } yield scala.util.Success(())
+
+  def delComment(id: String, commentId: String): Future[Try[Unit]] = ???
+
+}
+
+class EsReportRepository extends EsRepository[Report] with ReportRepository {
+  import com.monolito.kiros.prime.data._
+
+  val indexName = "prime"
+  val docType = "documents"
+  val typeId = "report"
+  implicit val mapper = mapperReport
 }

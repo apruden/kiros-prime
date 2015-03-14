@@ -5,7 +5,7 @@ import scala.collection.JavaConverters._
 import com.sksamuel.elastic4s.source.DocumentMap
 
 case class Article (
-  articleId: String,
+  id: String,
   title: String,
   content: String,
   tags: List[String],
@@ -15,7 +15,8 @@ case class Article (
   attachments: List[Attachment]
 ) extends DocumentMap with Entity {
   override def map = Map[String, Any](
-    "articleId" -> articleId,
+    "id" -> id,
+    "typeId" -> "article",
     "title" -> title,
     "content" -> content,
     "tags" -> tags.toArray,
@@ -25,11 +26,34 @@ case class Article (
     "attachments" -> attachments.map(x => x.asInstanceOf[DocumentMap].map.asJava).toArray
   )
 
-  def getId = articleId
+  def getId = id
+}
+
+case class Report (
+  id: String,
+  date: Instant,
+  activities: List[String],
+  blockers: List[String],
+  createdBy: User,
+  lastEdit: Instant,
+  attachments: List[Attachment]
+) extends DocumentMap with Entity {
+  override def map = Map[String, Any](
+    "id" -> id,
+    "typeId" -> "report",
+    "date" -> date.toString,
+    "activitie" -> activities.toArray,
+    "blockers" -> blockers.toArray,
+    "createdBy" -> createdBy.asInstanceOf[DocumentMap].map.asJava,
+    "lastEdit" -> lastEdit.toString,
+    "attachments" -> attachments.map(x => x.asInstanceOf[DocumentMap].map.asJava).toArray
+  )
+
+  def getId = id
 }
 
 case class Comment (
-  commentId: String,
+  id: String,
   targetId: String,
   content:String,
   postedBy: User,
@@ -38,7 +62,7 @@ case class Comment (
 ) extends DocumentMap with Entity {
 
   override def map = Map[String, Any](
-    "commentId" -> commentId,
+    "id" -> id,
     "targetId" -> targetId,
     "content" -> content,
     "postedBy" -> postedBy.asInstanceOf[DocumentMap].map.asJava,
@@ -46,16 +70,16 @@ case class Comment (
     "attachments" -> attachments.map(x => x.asInstanceOf[DocumentMap].map.asJava).toArray
   )
 
-  def getId = commentId
+  def getId = id
 }
 
 case class Attachment (
-  attachmentId: String,
+  id: String,
   filename:String,
   created: Instant
 ) extends DocumentMap {
   override def map = Map (
-    "attachmentId" -> attachmentId,
+    "id" -> id,
     "filename" -> filename,
     "created" -> created.toString
     )

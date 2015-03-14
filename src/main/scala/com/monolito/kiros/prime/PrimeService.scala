@@ -59,12 +59,12 @@ trait MyAppContextAware {
 
 trait MyAppContext {
   val articles: ArticleRepository
-  val comments: CommentRepository
+  val reports: ReportRepository
 }
 
 class EsMyAppContext extends MyAppContext {
   val articles = new EsArticleRepository
-  val comments = new EsCommentRepository
+  val reports = new EsReportRepository
 }
 
 trait ProdMyAppContextAware extends MyAppContextAware {
@@ -154,21 +154,15 @@ trait PrimeService extends HttpService with CORSSupport { self: MyAppContextAwar
                     }
                   }
                 }
-              } ~
-              get {
-                complete(getComments(articleId)(appContext))
               }
             } ~
             pathPrefix (Segment) { commentId =>
               delete {
                 authorized(List("prime")) {
-                  _ => onSuccess(deleteComment(commentId)(appContext)) {
+                  _ => onSuccess(deleteComment(articleId, commentId)(appContext)) {
                     _ => complete ("OK")
                   }
                 }
-              } ~
-              get {
-                complete(getComment(commentId)(appContext))
               }
             }
           }
@@ -177,34 +171,20 @@ trait PrimeService extends HttpService with CORSSupport { self: MyAppContextAwar
     }
 
   def addComment(articleId: String, comment:Comment): MyAppContext #> Try[Unit] = {
-    val commentToSave = if (comment.commentId == "") comment.copy(commentId = java.util.UUID.randomUUID.toString) else comment
+    val commentToSave = if (comment.id == "") comment.copy(id = java.util.UUID.randomUUID.toString) else comment
     ReaderTFuture { ctx: MyAppContext =>
       for {
-        r <- ctx.comments.save(commentToSave)
+        r <- ctx.articles.updateComment(articleId, commentToSave)
       } yield r
     }
   }
 
-  def deleteComment (commentId: String): MyAppContext #> Try[Unit] =
+  def deleteComment (articleId: String, commentId: String): MyAppContext #> Try[Unit] =
     ReaderTFuture { ctx: MyAppContext =>
       for {
-        r  <- ctx.comments.del(commentId)
+        r  <- ctx.articles.delComment(articleId, commentId)
       } yield r
     }
-
-  def getComment (commentId: String): MyAppContext #> Option[Comment] =
-    ReaderTFuture { ctx: MyAppContext =>
-      for {
-        c  <- ctx.comments.find(commentId)
-      } yield c
-    }
-
-  def getComments(aid: String): MyAppContext #> List[Comment] =
-    ReaderTFuture(ctx =>
-        for {
-          comments <- ctx.comments.findByTarget(aid)
-        } yield comments
-    )
 
   def searchArticles(offset: Int, length: Int, query: Option[String]): MyAppContext #> List[Article] =
     ReaderTFuture(ctx => ctx.articles.findAll(offset, length, query))
@@ -213,7 +193,7 @@ trait PrimeService extends HttpService with CORSSupport { self: MyAppContextAwar
     ReaderTFuture(ctx => ctx.articles.find(id))
 
   def saveOrUpdateArticle(article: Article, cred: OAuthCred): MyAppContext #> Try[Unit] = {
-    val articleToSave = article.copy(articleId=if (article.articleId == "") java.util.UUID.randomUUID.toString else article.articleId, lastEdit=java.time.Instant.now)
+    val articleToSave = article.copy(id=if (article.id == "") java.util.UUID.randomUUID.toString else article.id, lastEdit=java.time.Instant.now)
     for {
       c <- ReaderTFuture { (ctx: MyAppContext) => ctx.articles.save(articleToSave) }
     } yield c

@@ -51,7 +51,7 @@ class WikiServiceSpec extends Specification with Specs2RouteTest with WikiServic
     }
 
     "post article" in {
-      Post("/articles", HttpEntity(MediaTypes.`application/json`, """{"articleId":"123", "title": "test", "content": "tata", "tags":[]}""")) ~> addHeader("Authorization", "Bearer dWlkOnVzZXJAdGVzdC5jb206d2lraXxobWFjdmFsdWU=") ~> wikiRoutes ~> check {
+      Post("/articles", HttpEntity(MediaTypes.`application/json`, """{"id":"123", "title": "test", "content": "tata", "tags":[]}""")) ~> addHeader("Authorization", "Bearer dWlkOnVzZXJAdGVzdC5jb206d2lraXxobWFjdmFsdWU=") ~> wikiRoutes ~> check {
         responseAs[String] === "OK"
       }
     }
