@@ -11,6 +11,8 @@ import com.sksamuel.elastic4s.source.DocumentMap
 import com.sksamuel.elastic4s.ElasticDsl._
 import com.sksamuel.elastic4s.mappings.FieldType._
 import org.elasticsearch.action.get.GetResponse
+import org.elasticsearch.search.sort.SortOrder
+import org.elasticsearch.common.settings.ImmutableSettings
 import scala.collection.JavaConversions._
 import java.time.Instant
 
@@ -47,7 +49,7 @@ trait EsRepository[T<:DocumentMap with Entity] extends Repository[T] {
 
   def findAll(offset: Int, limit: Int, query:Option[String]=None): Future[List[T]] =
       for {
-        r <- client.execute { search in indexName -> docType query termQuery("typeId", typeId) }
+        r <- client.execute { search in indexName -> docType query termQuery("typeId", typeId) sort { by field "_timestamp" order SortOrder.DESC } }
         c <- Future.successful { r.getHits.getHits }
         x <- Future.successful { c.map(y => y.getSource).toList }
       } yield x.map(z => z.toMap.convert[T])
@@ -64,25 +66,38 @@ trait EsRepository[T<:DocumentMap with Entity] extends Repository[T] {
 }
 
 object EsRepository {
-  val client = ElasticClient.remote("localhost", 9300)
+  //val client = ElasticClient.remote("localhost", 9300)
+  val settings = ImmutableSettings.settingsBuilder()
+  .put("http.enabled", true)
+
+  val client = ElasticClient.local(settings.build)
+
+  def query(q: String, offset: Int, size: Int): Future[SearchResult] =
+    for {
+      r<- client.execute { search in "prime"->"documents" query q }
+      x <- Future.successful { r.getHits.getHits.map(_.getSource).toList }
+      } yield (SearchResult.apply _)
+        .tupled(
+          x.map(_.toMap)
+          .partition(
+            _.get("typeId") == "article") match {
+                case (m, n) =>
+                  (m.map(_.convert[Article]), n.map(_.convert[Report]))
+              })
 
   def createIndex() = client.execute {
       create index "prime" mappings (
-        "documents" source true dynamic true dateDetection true dynamicDateFormats("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'") as (
+        "documents" source true timestamp true dynamic true dateDetection true dynamicDateFormats("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'") as (
           "id" typed StringType index "not_analyzed",
           "typeId" typed StringType index "not_analyzed",
-          "createdBy" typed ObjectType as (
-            "userId" typed StringType index "not_analyzed",
-            "username" typed StringType index "not_analyzed"
-            ),
-          "lastEditBy" typed ObjectType as (
+          "modifiedBy" typed ObjectType as (
             "userId" typed StringType index "not_analyzed",
             "username" typed StringType index "not_analyzed"
             ),
           "comments" typed NestedType as (
             "id" typed StringType index "not_analyzed",
             "targetId" typed StringType index "not_analyzed",
-            "postedBy" typed ObjectType as (
+            "modifiedBy" typed ObjectType as (
               "userId" typed StringType index "not_analyzed",
               "username" typed StringType index "not_analyzed"
             )
@@ -91,8 +106,15 @@ object EsRepository {
             "id" typed StringType index "not_analyzed"
           )
         )
-      ) shards 4
+      ) shards 1 replicas 1
     }.await
 
-  if (!client.execute { status() }.await.getIndices().contains("prime")) createIndex()
+  try {
+    if (!client.execute { status() }.await.getIndices().contains("prime"))
+      createIndex()
+  } catch {
+    case e: Throwable => {
+      println (e)
+    }
+  }
 }

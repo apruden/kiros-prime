@@ -9,9 +9,9 @@ case class Article (
   title: String,
   content: String,
   tags: List[String],
-  createdBy: User,
-  lastEditBy: User,
-  lastEdit: Instant,
+  modifiedBy: User,
+  modified: Instant,
+  comments: List[Comment],
   attachments: List[Attachment]
 ) extends DocumentMap with Entity {
   override def map = Map[String, Any](
@@ -20,32 +20,42 @@ case class Article (
     "title" -> title,
     "content" -> content,
     "tags" -> tags.toArray,
-    "createdBy" -> createdBy.asInstanceOf[DocumentMap].map.asJava,
-    "lastEditBy" -> lastEditBy.asInstanceOf[DocumentMap].map.asJava,
-    "lastEdit" -> lastEdit.toString,
+    "modifiedBy" -> modifiedBy.asInstanceOf[DocumentMap].map.asJava,
+    "modified" -> modified.toString,
+    "comments" -> comments.map(x => x.asInstanceOf[DocumentMap].map.asJava).toArray,
     "attachments" -> attachments.map(x => x.asInstanceOf[DocumentMap].map.asJava).toArray
   )
 
   def getId = id
 }
 
+case class Activity (
+  content: String,
+  duration: Float
+  ) extends DocumentMap {
+  override def map = Map (
+    "content" -> content,
+    "duration" -> duration
+    )
+}
+
 case class Report (
   id: String,
   date: Instant,
-  activities: List[String],
+  activities: List[Activity],
   blockers: List[String],
-  createdBy: User,
-  lastEdit: Instant,
+  modifiedBy: User,
+  modified: Instant,
   attachments: List[Attachment]
 ) extends DocumentMap with Entity {
   override def map = Map[String, Any](
     "id" -> id,
     "typeId" -> "report",
     "date" -> date.toString,
-    "activitie" -> activities.toArray,
+    "activities" -> activities.map(x => x.asInstanceOf[DocumentMap].map.asJava).toArray,
     "blockers" -> blockers.toArray,
-    "createdBy" -> createdBy.asInstanceOf[DocumentMap].map.asJava,
-    "lastEdit" -> lastEdit.toString,
+    "modifiedBy" -> modifiedBy.asInstanceOf[DocumentMap].map.asJava,
+    "modified" -> modified.toString,
     "attachments" -> attachments.map(x => x.asInstanceOf[DocumentMap].map.asJava).toArray
   )
 
@@ -56,8 +66,8 @@ case class Comment (
   id: String,
   targetId: String,
   content:String,
-  postedBy: User,
-  posted: Instant,
+  modifiedBy: User,
+  modified: Instant,
   attachments: List[Attachment]
 ) extends DocumentMap with Entity {
 
@@ -65,8 +75,8 @@ case class Comment (
     "id" -> id,
     "targetId" -> targetId,
     "content" -> content,
-    "postedBy" -> postedBy.asInstanceOf[DocumentMap].map.asJava,
-    "posted" -> posted.toString,
+    "modifiedBy" -> modifiedBy.asInstanceOf[DocumentMap].map.asJava,
+    "modified" -> modified.toString,
     "attachments" -> attachments.map(x => x.asInstanceOf[DocumentMap].map.asJava).toArray
   )
 
@@ -76,12 +86,12 @@ case class Comment (
 case class Attachment (
   id: String,
   filename:String,
-  created: Instant
+  modified: Instant
 ) extends DocumentMap {
   override def map = Map (
     "id" -> id,
     "filename" -> filename,
-    "created" -> created.toString
+    "modified" -> modified.toString
     )
 }
 
@@ -95,3 +105,7 @@ case class User (
     )
 }
 
+
+case class SearchResult (
+  articles: List[Article],
+  reports: List[Report])

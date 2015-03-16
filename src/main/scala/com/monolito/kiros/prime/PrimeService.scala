@@ -5,6 +5,7 @@ import scala.concurrent._
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.util.Try
 import com.monolito.kiros.prime.data._
+import com.monolito.kiros.prime.data.EsRepository._
 import com.monolito.kiros.prime.model._
 import akka.actor.Actor
 import spray.http._
@@ -29,6 +30,7 @@ import spray.httpx.marshalling.Marshaller
 
 import SprayJsonSupport._
 
+
 class PrimeServiceActor extends Actor with PrimeService with ProdMyAppContextAware {
   import CustomRejectionHandler._
 
@@ -38,6 +40,7 @@ class PrimeServiceActor extends Actor with PrimeService with ProdMyAppContextAwa
 }
 
 object WikiJsonProtocol extends DefaultJsonProtocol {
+  //implicit declaration order matters
   implicit object InstantJsonFormat extends RootJsonFormat[java.time.Instant] {
     def write(c: java.time.Instant) = JsString(c.toString)
     def read(value: JsValue) = value match {
@@ -46,11 +49,23 @@ object WikiJsonProtocol extends DefaultJsonProtocol {
     }
   }
 
-  //implicit declaration order matters
   implicit val userFormat = jsonFormat2(User)
   implicit val attachmentFormat = jsonFormat3(Attachment)
+  implicit val activityFormat = jsonFormat2(Activity)
   implicit val commentFormat = jsonFormat6(Comment)
   implicit val articleFormat = jsonFormat8(Article)
+  implicit val reportFormat = jsonFormat7(Report)
+  implicit val resultFormat = jsonFormat2(SearchResult)
+
+  /*implicit object AnyJsonFormat extends JsonFormat[Any] {
+    def write(x: Any) = x match {
+      case n: Int => JsNumber(n)
+      case s: String => JsString(s)
+      case x => JsString(x.toString)
+    }
+
+    def read(value: JsValue) = ???
+  }*/
 }
 
 trait MyAppContextAware {
@@ -93,8 +108,15 @@ trait PrimeService extends HttpService with CORSSupport { self: MyAppContextAwar
           }
         }
       } ~
-      path("assets") {
-        post {
+      path("search") {
+        get {
+          parameters('offset.as[Int] ? 0, 'length.as[Int] ? 20, 'query.as[String]) {
+            (offset, length, query) =>
+              complete(search(query, offset, length)(appContext))
+          }
+        }
+      } ~
+      path("assets")  {
           entity(as[MultipartFormData]) { formData =>
               complete {
                 val fileNames = formData.fields.map {
@@ -106,7 +128,6 @@ trait PrimeService extends HttpService with CORSSupport { self: MyAppContextAwar
 
                 JsObject("fileNames" -> new JsArray(fileNames.map(JsString(_)).toVector))
               }
-          }
         }
       } ~
       pathPrefix("articles") {
@@ -167,8 +188,75 @@ trait PrimeService extends HttpService with CORSSupport { self: MyAppContextAwar
             }
           }
         }
+      } ~
+      pathPrefix("reports") {
+        pathEnd {
+          (post | put) {
+            authorized(List("prime")) {
+              cred => {
+                entity(as[Report]) {
+                  report =>
+                    onSuccess(saveOrUpdateReport(report, cred)(appContext)) {
+                      _ => complete("OK")
+                    }
+                }
+              }
+            }
+          } ~
+          get {
+            parameters('offset.as[Int] ? 0, 'length.as[Int] ? 20, 'query.as[String] ? ) {
+              (offset, length, query) => authorized(List("prime")) {
+                  _ => complete(searchReports(offset, length, query)(appContext))
+                }
+            }
+          }
+        } ~
+        pathPrefix(Segment) { reportId =>
+          pathEnd {
+            delete {
+              authorized(List("prime_admin")) {
+                _ => onSuccess(deleteReport(reportId)(appContext)) {
+                  _ => complete("OK")
+                }
+              }
+            } ~
+            get {
+              complete(getReport(reportId)(appContext))
+            }
+          } ~
+          pathPrefix ("comments") {
+            pathEnd {
+              post {
+                authorized(List("prime")) {
+                  _ => entity(as[Comment]) {
+                    comment => onSuccess(addComment(reportId, comment)(appContext)) {
+                      _ => complete("OK")
+                    }
+                  }
+                }
+              }
+            } ~
+            pathPrefix (Segment) { commentId =>
+              delete {
+                authorized(List("prime")) {
+                  _ => onSuccess(deleteComment(reportId, commentId)(appContext)) {
+                    _ => complete ("OK")
+                  }
+                }
+              }
+            }
+          }
+        }
       }
     }
+
+  def search(q: String, offset: Int = 0, size:Int = 20): MyAppContext #> SearchResult = {
+    ReaderTFuture { ctx =>
+      for {
+        r <- query(q, offset, size)
+      } yield r
+    }
+  }
 
   def addComment(articleId: String, comment:Comment): MyAppContext #> Try[Unit] = {
     val commentToSave = if (comment.id == "") comment.copy(id = java.util.UUID.randomUUID.toString) else comment
@@ -193,7 +281,7 @@ trait PrimeService extends HttpService with CORSSupport { self: MyAppContextAwar
     ReaderTFuture(ctx => ctx.articles.find(id))
 
   def saveOrUpdateArticle(article: Article, cred: OAuthCred): MyAppContext #> Try[Unit] = {
-    val articleToSave = article.copy(id=if (article.id == "") java.util.UUID.randomUUID.toString else article.id, lastEdit=java.time.Instant.now)
+    val articleToSave = article.copy(id=if (article.id == "") java.util.UUID.randomUUID.toString else article.id, modified=java.time.Instant.now)
     for {
       c <- ReaderTFuture { (ctx: MyAppContext) => ctx.articles.save(articleToSave) }
     } yield c
@@ -224,4 +312,20 @@ trait PrimeService extends HttpService with CORSSupport { self: MyAppContextAwar
       case _ : Exception => false
     }
   }
+
+  def searchReports(offset: Int, length: Int, query: Option[String]): MyAppContext #> List[Report] =
+    ReaderTFuture(ctx => ctx.reports.findAll(offset, length, query))
+
+  def getReport(id: String): MyAppContext #> Option[Report] =
+    ReaderTFuture(ctx => ctx.reports.find(id))
+
+  def saveOrUpdateReport(report: Report, cred: OAuthCred): MyAppContext #> Try[Unit] = {
+    val reportToSave = report.copy(id=if (report.id == "") java.util.UUID.randomUUID.toString else report.id, modified=java.time.Instant.now)
+    for {
+      c <- ReaderTFuture { (ctx: MyAppContext) => ctx.reports.save(reportToSave) }
+    } yield c
+  }
+
+  def deleteReport(id: String): MyAppContext #> Try[Unit] =
+    ReaderTFuture { (r: MyAppContext) => r.reports.del(id) }
 }
