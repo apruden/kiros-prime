@@ -31,6 +31,12 @@ package object data {
   )
   }
 
+  implicit val mapperBlocker: MapConvert[Blocker] = new MapConvert[Blocker] {
+    def conv(values: Map[String, Any]): Blocker = Blocker(
+      values.get("content").get.toString
+    )
+  }
+
   implicit val mapperArticle: MapConvert[Article] = new MapConvert[Article] {
     def conv(values: Map[String, Any]): Article =
       Article(
@@ -51,10 +57,11 @@ package object data {
         values.get("id").get.toString,
         Instant.parse(values.get("date").get.toString),
         collectionAsScalaIterable(values.get("activities").get.asInstanceOf[java.util.List[java.util.Map[String, Any]]]).toList.map {m => mapAsScalaMap(m).toMap.convert[Activity]},
-        collectionAsScalaIterable(values.get("blockers").get.asInstanceOf[java.util.List[String]]).toList,
+        collectionAsScalaIterable(values.get("blockers").get.asInstanceOf[java.util.List[java.util.Map[String, Any]]]).toList.map {m => mapAsScalaMap(m).toMap.convert[Blocker]},
         mapAsScalaMap(values.get("modifiedBy").get.asInstanceOf[java.util.Map[String, Any]]).toMap.convert[User],
         Instant.parse(values.get("modified").get.toString),
-        collectionAsScalaIterable(values.get("attachments").get.asInstanceOf[java.util.List[Map[String, Any]]]).toList.map {_.convert[Attachment]}
+        collectionAsScalaIterable(values.get("attachments").get.asInstanceOf[java.util.List[Map[String, Any]]]).toList.map {_.convert[Attachment]},
+        collectionAsScalaIterable(values.get("comments").getOrElse(new java.util.ArrayList).asInstanceOf[java.util.List[java.util.Map[String, Any]]]).toList.map { c => mapAsScalaMap(c).toMap.convert[Comment]}
       )
   }
 

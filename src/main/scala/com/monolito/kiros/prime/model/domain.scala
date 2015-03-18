@@ -39,24 +39,34 @@ case class Activity (
     )
 }
 
+case class Blocker (
+  content: String
+  ) extends DocumentMap {
+  override def map = Map (
+    "content" -> content
+    )
+}
+
 case class Report (
   id: String,
   date: Instant,
   activities: List[Activity],
-  blockers: List[String],
+  blockers: List[Blocker],
   modifiedBy: User,
   modified: Instant,
-  attachments: List[Attachment]
+  attachments: List[Attachment],
+  comments: List[Comment]
 ) extends DocumentMap with Entity {
   override def map = Map[String, Any](
     "id" -> id,
     "typeId" -> "report",
     "date" -> date.toString,
     "activities" -> activities.map(x => x.asInstanceOf[DocumentMap].map.asJava).toArray,
-    "blockers" -> blockers.toArray,
+    "blockers" -> blockers.map(x => x.asInstanceOf[DocumentMap].map.asJava).toArray,
     "modifiedBy" -> modifiedBy.asInstanceOf[DocumentMap].map.asJava,
     "modified" -> modified.toString,
-    "attachments" -> attachments.map(x => x.asInstanceOf[DocumentMap].map.asJava).toArray
+    "attachments" -> attachments.map(x => x.asInstanceOf[DocumentMap].map.asJava).toArray,
+    "comments" -> comments.map(x => x.asInstanceOf[DocumentMap].map.asJava).toArray
   )
 
   def getId = id

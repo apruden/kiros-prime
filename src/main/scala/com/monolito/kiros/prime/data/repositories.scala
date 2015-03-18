@@ -80,7 +80,7 @@ object EsRepository {
         .tupled(
           x.map(_.toMap)
           .partition(
-            _.get("typeId") == "article") match {
+            _.get("typeId") == Some("article")) match {
                 case (m, n) =>
                   (m.map(_.convert[Article]), n.map(_.convert[Report]))
               })

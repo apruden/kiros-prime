@@ -51,10 +51,11 @@ object WikiJsonProtocol extends DefaultJsonProtocol {
 
   implicit val userFormat = jsonFormat2(User)
   implicit val attachmentFormat = jsonFormat3(Attachment)
-  implicit val activityFormat = jsonFormat2(Activity)
   implicit val commentFormat = jsonFormat6(Comment)
+  implicit val activityFormat = jsonFormat2(Activity)
+  implicit val blockerFormat = jsonFormat1(Blocker)
   implicit val articleFormat = jsonFormat8(Article)
-  implicit val reportFormat = jsonFormat7(Report)
+  implicit val reportFormat = jsonFormat8(Report)
   implicit val resultFormat = jsonFormat2(SearchResult)
 
   /*implicit object AnyJsonFormat extends JsonFormat[Any] {
