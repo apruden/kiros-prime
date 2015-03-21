@@ -29,7 +29,11 @@ trait ArticleRepository extends Repository[Article] {
   def delComment(id: String, commentId: String): Future[Try[Unit]]
 }
 
-trait ReportRepository extends Repository[Report]
+trait ReportRepository extends Repository[Report] {
+  def updateComment(id: String, comment: Comment): Future[Try[Unit]]
+
+  def delComment(id: String, commentId: String): Future[Try[Unit]]
+}
 
 trait CommentRepository extends Repository[Comment]
 
@@ -66,11 +70,9 @@ trait EsRepository[T<:DocumentMap with Entity] extends Repository[T] {
 }
 
 object EsRepository {
-  //val client = ElasticClient.remote("localhost", 9300)
-  val settings = ImmutableSettings.settingsBuilder()
-  .put("http.enabled", true)
-
-  val client = ElasticClient.local(settings.build)
+  val client = ElasticClient.remote("localhost", 9300)
+  //val settings = ImmutableSettings.settingsBuilder().put("http.enabled", true)
+  //val client = ElasticClient.local(settings.build)
 
   def query(q: String, offset: Int, size: Int): Future[SearchResult] =
     for {

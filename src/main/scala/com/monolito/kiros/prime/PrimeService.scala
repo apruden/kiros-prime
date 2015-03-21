@@ -51,7 +51,7 @@ object WikiJsonProtocol extends DefaultJsonProtocol {
 
   implicit val userFormat = jsonFormat2(User)
   implicit val attachmentFormat = jsonFormat3(Attachment)
-  implicit val commentFormat = jsonFormat6(Comment)
+  implicit val commentFormat = jsonFormat7(Comment)
   implicit val activityFormat = jsonFormat2(Activity)
   implicit val blockerFormat = jsonFormat1(Blocker)
   implicit val articleFormat = jsonFormat8(Article)
@@ -102,6 +102,20 @@ trait PrimeService extends HttpService with CORSSupport { self: MyAppContextAwar
   }
 
   val wikiRoutes = cors {
+        path("assets")  {
+          entity(as[MultipartFormData]) { formData =>
+              complete {
+                val fileNames = formData.fields.map {
+                  case BodyPart(entity, headers) =>
+                    val tmp = java.util.UUID.randomUUID.toString
+                    saveAttachment(tmp, new ByteArrayInputStream(entity.data.toByteArray))
+                    tmp
+                }
+
+                JsObject("fileNames" -> new JsArray(fileNames.map(JsString(_)).toVector))
+              }
+        }
+      } ~
       pathSingleSlash {
         get {
           respondWithMediaType(`text/html`) {
@@ -115,20 +129,6 @@ trait PrimeService extends HttpService with CORSSupport { self: MyAppContextAwar
             (offset, length, query) =>
               complete(search(query, offset, length)(appContext))
           }
-        }
-      } ~
-      path("assets")  {
-          entity(as[MultipartFormData]) { formData =>
-              complete {
-                val fileNames = formData.fields.map {
-                  case BodyPart(entity, headers) =>
-                    val tmp = java.util.UUID.randomUUID.toString
-                    saveAttachment(tmp, new ByteArrayInputStream(entity.data.toByteArray))
-                    tmp
-                }
-
-                JsObject("fileNames" -> new JsArray(fileNames.map(JsString(_)).toVector))
-              }
         }
       } ~
       pathPrefix("articles") {
@@ -165,26 +165,26 @@ trait PrimeService extends HttpService with CORSSupport { self: MyAppContextAwar
             get {
               complete(getArticle(articleId)(appContext))
             }
-          } ~
-          pathPrefix ("comments") {
-            pathEnd {
-              post {
-                authorized(List("prime")) {
-                  _ => entity(as[Comment]) {
-                    comment => onSuccess(addComment(articleId, comment)(appContext)) {
-                      _ => complete("OK")
-                    }
-                  }
+          }
+        }
+      } ~
+      pathPrefix ("comments") {
+        pathEnd {
+          post {
+            authorized(List("prime")) { _ =>
+              entity(as[Comment]) {comment =>
+                onSuccess(addComment(comment)(appContext)) { _ =>
+                  complete("OK")
                 }
               }
-            } ~
-            pathPrefix (Segment) { commentId =>
-              delete {
-                authorized(List("prime")) {
-                  _ => onSuccess(deleteComment(articleId, commentId)(appContext)) {
-                    _ => complete ("OK")
-                  }
-                }
+            }
+          }
+        } ~
+        pathPrefix (Segment) { commentId =>
+          delete {
+            authorized(List("prime")) {
+              _ => onSuccess(deleteComment(commentId)(appContext)) {
+                _ => complete ("OK")
               }
             }
           }
@@ -224,28 +224,6 @@ trait PrimeService extends HttpService with CORSSupport { self: MyAppContextAwar
             get {
               complete(getReport(reportId)(appContext))
             }
-          } ~
-          pathPrefix ("comments") {
-            pathEnd {
-              post {
-                authorized(List("prime")) {
-                  _ => entity(as[Comment]) {
-                    comment => onSuccess(addComment(reportId, comment)(appContext)) {
-                      _ => complete("OK")
-                    }
-                  }
-                }
-              }
-            } ~
-            pathPrefix (Segment) { commentId =>
-              delete {
-                authorized(List("prime")) {
-                  _ => onSuccess(deleteComment(reportId, commentId)(appContext)) {
-                    _ => complete ("OK")
-                  }
-                }
-              }
-            }
           }
         }
       }
@@ -259,21 +237,19 @@ trait PrimeService extends HttpService with CORSSupport { self: MyAppContextAwar
     }
   }
 
-  def addComment(articleId: String, comment:Comment): MyAppContext #> Try[Unit] = {
+  def addComment(comment:Comment): MyAppContext #> Try[Unit] = {
     val commentToSave = if (comment.id == "") comment.copy(id = java.util.UUID.randomUUID.toString) else comment
     ReaderTFuture { ctx: MyAppContext =>
       for {
-        r <- ctx.articles.updateComment(articleId, commentToSave)
+        r <- if (comment.targetType == "article")
+                ctx.articles.updateComment(comment.targetId, commentToSave)
+             else
+                ctx.reports.updateComment(comment.targetId, commentToSave)
       } yield r
     }
   }
 
-  def deleteComment (articleId: String, commentId: String): MyAppContext #> Try[Unit] =
-    ReaderTFuture { ctx: MyAppContext =>
-      for {
-        r  <- ctx.articles.delComment(articleId, commentId)
-      } yield r
-    }
+  def deleteComment(commentId: String): MyAppContext #> Try[Unit] = ???
 
   def searchArticles(offset: Int, length: Int, query: Option[String]): MyAppContext #> List[Article] =
     ReaderTFuture(ctx => ctx.articles.findAll(offset, length, query))

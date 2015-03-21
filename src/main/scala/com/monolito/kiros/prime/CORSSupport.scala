@@ -10,18 +10,14 @@ trait CORSSupport { this: HttpService =>
   import CORSSupport._
 
   def cors[T]: Directive0 = mapRequestContext { ctx =>
-    ctx.withRouteResponseHandling({
+    ctx.withRouteResponseHandling {
       case Rejected(x) if (ctx.request.method.equals(HttpMethods.OPTIONS) && !x.filter(_.isInstanceOf[MethodRejection]).isEmpty) => {
-          val allowedMethods: List[HttpMethod] =
-            x.filter(_.isInstanceOf[MethodRejection])
-              .map(rejection => { rejection.asInstanceOf[MethodRejection].supported })
-          ctx.complete(HttpResponse().withHeaders(
-                `Access-Control-Allow-Methods`(OPTIONS, allowedMethods :_*) :: allowOriginHeader :: optionsCorsHeaders
-              ))
+          val allowedMethods = x.filter(_.isInstanceOf[MethodRejection]).map(_.asInstanceOf[MethodRejection].supported)
+          ctx.complete(HttpResponse().withHeaders(`Access-Control-Allow-Methods`(OPTIONS, allowedMethods :_*) :: allowOriginHeader :: optionsCorsHeaders))
       }
-  })
+    }
     .withHttpResponseHeadersMapped { headers =>
-      allowOriginHeader :: headers
+      (allowOriginHeader :: optionsCorsHeaders) ++ headers
     }
   }
 }
@@ -32,5 +28,3 @@ object CORSSupport {
     `Access-Control-Allow-Headers`("Origin, X-Requested-With, Content-Type, Accept, Accept-Encoding, Accept-Language, Host, Referer, User-Agent, Authorization"),
     `Access-Control-Max-Age`(1728000))
 }
-
-

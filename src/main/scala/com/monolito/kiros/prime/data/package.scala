@@ -47,7 +47,7 @@ package object data {
         mapAsScalaMap(values.get("modifiedBy").get.asInstanceOf[java.util.Map[String, Any]]).toMap.convert[User],
         Instant.parse(values.get("modified").get.toString),
         collectionAsScalaIterable(values.get("comments").get.asInstanceOf[java.util.List[java.util.Map[String, Any]]]).toList.map { c => mapAsScalaMap(c).toMap.convert[Comment]},
-        collectionAsScalaIterable(values.get("attachments").get.asInstanceOf[java.util.List[Map[String, Any]]]).toList.map {_.convert[Attachment]}
+        collectionAsScalaIterable(values.get("attachments").get.asInstanceOf[java.util.List[java.util.Map[String, Any]]]).toList.map {c => mapAsScalaMap(c).toMap.convert[Attachment]}
       )
   }
 
@@ -70,6 +70,7 @@ package object data {
       Comment(
         values.get("id").get.toString,
         values.get("targetId").get.toString,
+        values.get("targetType").get.toString,
         values.get("content").get.toString,
         mapAsScalaMap(values.get("modifiedBy").get.asInstanceOf[java.util.Map[String, Any]]).toMap.convert[User],
         Instant.parse(values.get("modified").get.toString),

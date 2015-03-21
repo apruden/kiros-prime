@@ -75,6 +75,7 @@ case class Report (
 case class Comment (
   id: String,
   targetId: String,
+  targetType: String,
   content:String,
   modifiedBy: User,
   modified: Instant,
@@ -84,6 +85,7 @@ case class Comment (
   override def map = Map[String, Any](
     "id" -> id,
     "targetId" -> targetId,
+    "targetType" -> targetType,
     "content" -> content,
     "modifiedBy" -> modifiedBy.asInstanceOf[DocumentMap].map.asJava,
     "modified" -> modified.toString,
@@ -95,7 +97,7 @@ case class Comment (
 
 case class Attachment (
   id: String,
-  filename:String,
+  filename: String,
   modified: Instant
 ) extends DocumentMap {
   override def map = Map (
