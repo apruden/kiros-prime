@@ -89,7 +89,8 @@ trait ProdMyAppContextAware extends MyAppContextAware {
 
 trait PrimeService extends HttpService with CORSSupport { self: MyAppContextAware =>
   import WikiJsonProtocol._
-
+  import com.monolito.kiros.prime.conf
+  val rootPath = conf.getString("kiros.prime.root-path")
   val appContext: MyAppContext
 
   val authenticated: Directive1[OAuthCred] = authenticate(OAuth2Auth(validateToken, "prime"))
@@ -101,8 +102,12 @@ trait PrimeService extends HttpService with CORSSupport { self: MyAppContextAwar
     case _ => reject
   }
 
-  val wikiRoutes = cors {
-        path("assets")  {
+  val wikiRoutes = getFromDirectory (rootPath) ~
+      pathSingleSlash {
+        getFromFile(List(rootPath,"index.html").mkString("/"))
+      } ~
+      cors {
+      path("assets")  {
           entity(as[MultipartFormData]) { formData =>
               complete {
                 val fileNames = formData.fields.map {
@@ -114,13 +119,6 @@ trait PrimeService extends HttpService with CORSSupport { self: MyAppContextAwar
 
                 JsObject("fileNames" -> new JsArray(fileNames.map(JsString(_)).toVector))
               }
-        }
-      } ~
-      pathSingleSlash {
-        get {
-          respondWithMediaType(`text/html`) {
-            complete(html.index(None).toString)
-          }
         }
       } ~
       path("search") {

@@ -70,9 +70,11 @@ trait EsRepository[T<:DocumentMap with Entity] extends Repository[T] {
 }
 
 object EsRepository {
-  val client = ElasticClient.remote("localhost", 9300)
-  //val settings = ImmutableSettings.settingsBuilder().put("http.enabled", true)
-  //val client = ElasticClient.local(settings.build)
+  //val client = ElasticClient.remote("localhost", 9300)
+  val settings = ImmutableSettings.settingsBuilder()
+    .put("http.enabled", true)
+    .put("node.local", true)
+  val client = ElasticClient.local(settings.build)
 
   def query(q: String, offset: Int, size: Int): Future[SearchResult] =
     for {

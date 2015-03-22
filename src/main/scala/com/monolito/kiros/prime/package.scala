@@ -11,8 +11,10 @@ import scala.util.Try
 import spray.routing.authentication._
 import spray.http.HttpHeaders._
 import shapeless._
+import com.typesafe.config._
 
 package object prime {
+  val conf = ConfigFactory.load()
 
   type OAuth2Authenticator[T] = Option[String] => Future[Option[T]]
 
