@@ -265,19 +265,16 @@ trait PrimeService extends HttpService with CORSSupport { self: MyAppContextAwar
   def deleteArticle(id: String): MyAppContext #> Try[Unit] =
     ReaderTFuture { (r: MyAppContext) => r.articles.del(id) }
 
-  private def saveAttachment(fileName: String, content: InputStream): Boolean = {
-    saveAttachment[InputStream](fileName, content,
-    { (is, os) =>
+  private def saveAttachment(fileName: String, content: InputStream): Boolean =
+    saveAttachment[InputStream](fileName, content, {(is, os) =>
       val buffer = new Array[Byte](16384)
       Iterator
         .continually (is.read(buffer))
         .takeWhile (-1 !=)
-        .foreach (read=>os.write(buffer,0,read))
-    }
-    )
-  }
+        .foreach (read => os.write(buffer,0,read))
+    })
 
-  private def saveAttachment[T](fileName: String, content: T, writeFile: (T, OutputStream) => Unit): Boolean = {
+  private def saveAttachment[T](fileName: String, content: T, writeFile: (T, OutputStream) => Unit): Boolean =
     try {
       val fos = new java.io.FileOutputStream("/home/alex/" + fileName)
       writeFile(content, fos)
@@ -286,7 +283,6 @@ trait PrimeService extends HttpService with CORSSupport { self: MyAppContextAwar
     } catch {
       case _ : Exception => false
     }
-  }
 
   def searchReports(offset: Int, length: Int, query: Option[String]): MyAppContext #> List[Report] =
     ReaderTFuture(ctx => ctx.reports.findAll(offset, length, query))

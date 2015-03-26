@@ -26,7 +26,7 @@ class EsArticleRepository extends EsRepository[Article] with ArticleRepository {
 
   def updateComment(articleId: String, comment: Comment): Future[Try[Unit]] =
     for {
-      r <- client.execute(update id articleId in indexName->docType script "ctx._source.comments = [comment, *(ctx._source.comments ?: [])]" params (Map("comment" -> comment.asInstanceOf[DocumentMap].map.asJava)))
+      r <- client.execute(index into indexName -> "comments" doc comment id comment.getId )
     } yield scala.util.Success(())
 
   def delComment(id: String, commentId: String): Future[Try[Unit]] = ???
@@ -44,7 +44,7 @@ class EsReportRepository extends EsRepository[Report] with ReportRepository {
 
   def updateComment(reportId: String, comment: Comment): Future[Try[Unit]] =
     for {
-      r <- client.execute(update id reportId in indexName->docType script "ctx._source.comments = [comment, *(ctx._source.comments ?: [])]" params (Map("comment" -> comment.asInstanceOf[DocumentMap].map.asJava)))
+      r <- client.execute(index into indexName -> "comments" doc comment id comment.getId )
     } yield scala.util.Success(())
 
   def delComment(id: String, commentId: String): Future[Try[Unit]] = ???
