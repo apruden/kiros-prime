@@ -46,35 +46,35 @@ package object data {
         collectionAsScalaIterable(values.get("tags").get.asInstanceOf[java.util.List[String]]).toList,
         mapAsScalaMap(values.get("modifiedBy").get.asInstanceOf[java.util.Map[String, Any]]).toMap.convert[User],
         Instant.parse(values.get("modified").get.toString),
-        collectionAsScalaIterable(values.get("comments").get.asInstanceOf[java.util.Collection[java.util.Map[String, Any]]]).toList.map { c => mapAsScalaMap(c).toMap.convert[Comment]},
-        collectionAsScalaIterable(values.get("attachments").get.asInstanceOf[java.util.List[java.util.Map[String, Any]]]).toList.map {c => mapAsScalaMap(c).toMap.convert[Attachment]}
+        collectionAsScalaIterable(values.getOrElse("comments", new java.util.ArrayList).asInstanceOf[java.util.Collection[java.util.Map[String, Any]]]).toList.map {mapAsScalaMap(_).toMap.convert[Comment]},
+        collectionAsScalaIterable(values.getOrElse("attachments", new java.util.ArrayList).asInstanceOf[java.util.List[java.util.Map[String, Any]]]).toList.map {mapAsScalaMap(_).toMap.convert[Attachment]}
       )
   }
 
   implicit val mapperReport: MapConvert[Report] = new MapConvert[Report] {
-    def conv(values: Map[String, Any]): Report =
+    def conv(v: Map[String, Any]): Report =
       Report(
-        values.get("id").get.toString,
-        Instant.parse(values.get("date").get.toString),
-        collectionAsScalaIterable(values.get("activities").get.asInstanceOf[java.util.List[java.util.Map[String, Any]]]).toList.map {m => mapAsScalaMap(m).toMap.convert[Activity]},
-        collectionAsScalaIterable(values.get("blockers").get.asInstanceOf[java.util.List[java.util.Map[String, Any]]]).toList.map {m => mapAsScalaMap(m).toMap.convert[Blocker]},
-        mapAsScalaMap(values.get("modifiedBy").get.asInstanceOf[java.util.Map[String, Any]]).toMap.convert[User],
-        Instant.parse(values.get("modified").get.toString),
-        collectionAsScalaIterable(values.get("attachments").get.asInstanceOf[java.util.List[Map[String, Any]]]).toList.map {_.convert[Attachment]},
-        collectionAsScalaIterable(values.get("comments").getOrElse(new java.util.ArrayList).asInstanceOf[java.util.Collection[java.util.Map[String, Any]]]).toList.map { c => mapAsScalaMap(c).toMap.convert[Comment]}
+        v.get("id").get.toString,
+        Instant.parse(v.get("date").get.toString),
+        collectionAsScalaIterable(v.get("activities").get.asInstanceOf[java.util.List[java.util.Map[String, Any]]]).toList.map {mapAsScalaMap(_).toMap.convert[Activity]},
+        collectionAsScalaIterable(v.get("blockers").get.asInstanceOf[java.util.List[java.util.Map[String, Any]]]).toList.map {mapAsScalaMap(_).toMap.convert[Blocker]},
+        mapAsScalaMap(v.get("modifiedBy").get.asInstanceOf[java.util.Map[String, Any]]).toMap.convert[User],
+        Instant.parse(v.get("modified").get.toString),
+        collectionAsScalaIterable(v.getOrElse("attachments", new java.util.ArrayList).asInstanceOf[java.util.List[Map[String, Any]]]).toList.map {_.convert[Attachment]},
+        collectionAsScalaIterable(v.getOrElse("comments", new java.util.ArrayList).asInstanceOf[java.util.Collection[java.util.Map[String, Any]]]).toList.map {mapAsScalaMap(_).toMap.convert[Comment]}
       )
   }
 
   implicit val mapperComment: MapConvert[Comment] = new MapConvert[Comment] {
-    def conv(values: Map[String, Any]): Comment =
+    def conv(v: Map[String, Any]): Comment =
       Comment(
-        values.get("id").get.toString,
-        values.get("targetId").get.toString,
-        values.get("targetType").get.toString,
-        values.get("content").get.toString,
-        mapAsScalaMap(values.get("modifiedBy").get.asInstanceOf[java.util.Map[String, Any]]).toMap.convert[User],
-        Instant.parse(values.get("modified").get.toString),
-        collectionAsScalaIterable(values.get("attachments").get.asInstanceOf[java.util.List[Map[String, Any]]]).toList.map {_.convert[Attachment]}
+        v.get("id").get.toString,
+        v.get("targetId").get.toString,
+        v.get("targetType").get.toString,
+        v.get("content").get.toString,
+        mapAsScalaMap(v.get("modifiedBy").get.asInstanceOf[java.util.Map[String, Any]]).toMap.convert[User],
+        Instant.parse(v.get("modified").get.toString),
+        collectionAsScalaIterable(v.get("attachments").get.asInstanceOf[java.util.List[Map[String, Any]]]).toList.map {_.convert[Attachment]}
       )
   }
 }

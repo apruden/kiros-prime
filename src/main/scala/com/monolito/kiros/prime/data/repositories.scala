@@ -51,7 +51,7 @@ trait EsRepository[T<:DocumentMap with Entity] extends Repository[T] {
     for {
       c <- client.execute { get id tid from indexName -> docType }
       m <- Future.successful { c.getSource.toMap }
-      r <- client.execute { search in "prime" -> "comments" query termQuery ("targetId", tid) }
+      r <- client.execute { search in "prime" -> "comments" query termQuery ("targetId", tid) sort { by field "_timestamp" order SortOrder.DESC }}
       z <- Future.successful { (m + ("comments" -> r.getHits.map(_.getSource).asJava)).convert[T] }
     } yield Some(z)
 
@@ -59,7 +59,7 @@ trait EsRepository[T<:DocumentMap with Entity] extends Repository[T] {
       for {
         r <- client.execute { search in indexName -> docType query termQuery("typeId", typeId) sort { by field "_timestamp" order SortOrder.DESC } }
         c <- Future.successful { r.getHits.getHits }
-        u <- client.execute { search in "prime" -> "comments" query termsQuery ("targetId", c.map(_.getId):_*) }
+        u <- client.execute { search in "prime" -> "comments" query termsQuery ("targetId", c.map(_.getId):_*) sort { by field "_timestamp" order SortOrder.DESC }}
         x <- Future.successful { c.map(h => {
           val xx = u.getHits.map(_.getSource).filter(_.get("targetId") == h.getId())
           h.getSource.put("comments", xx.asJava)
