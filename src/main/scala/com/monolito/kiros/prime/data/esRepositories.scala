@@ -5,17 +5,13 @@ import scala.concurrent.ExecutionContext.Implicits.global
 import scala.util.Try
 import scala.collection.JavaConversions._
 import scala.collection.JavaConverters._
-import com.sksamuel.elastic4s.ElasticClient
-import com.sksamuel.elastic4s.ElasticDsl._
-import org.elasticsearch.action.get.GetResponse
 import com.monolito.kiros.prime._
 import com.monolito.kiros.prime.model._
 import java.time.Instant
-import com.sksamuel.elastic4s.source.DocumentMap
 
 
 class EsArticleRepository extends EsRepository[Article] with ArticleRepository {
-  import EsRepository._
+  import EsClient._
   import com.monolito.kiros.prime.data._
 
   val indexName = "prime"
@@ -26,7 +22,7 @@ class EsArticleRepository extends EsRepository[Article] with ArticleRepository {
 
   def updateComment(articleId: String, comment: Comment): Future[Try[Unit]] =
     for {
-      r <- client.execute(index into indexName -> "comments" doc comment id comment.getId )
+      r <- put("comments", comment.getId, comment.map)
     } yield scala.util.Success(())
 
   def delComment(id: String, commentId: String): Future[Try[Unit]] = ???
@@ -34,7 +30,7 @@ class EsArticleRepository extends EsRepository[Article] with ArticleRepository {
 }
 
 class EsReportRepository extends EsRepository[Report] with ReportRepository {
-  import EsRepository._
+  import EsClient._
   import com.monolito.kiros.prime.data._
 
   val indexName = "prime"
@@ -44,7 +40,7 @@ class EsReportRepository extends EsRepository[Report] with ReportRepository {
 
   def updateComment(reportId: String, comment: Comment): Future[Try[Unit]] =
     for {
-      r <- client.execute(index into indexName -> "comments" doc comment id comment.getId )
+      r <- put("comments", comment.getId, comment.map)
     } yield scala.util.Success(())
 
   def delComment(id: String, commentId: String): Future[Try[Unit]] = ???

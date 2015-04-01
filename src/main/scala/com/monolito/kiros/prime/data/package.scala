@@ -1,6 +1,5 @@
 package com.monolito.kiros.prime
 
-import com.sksamuel.elastic4s.source.DocumentMap
 import scala.collection.JavaConversions._
 import scala.collection.JavaConverters._
 import com.monolito.kiros.prime.model._
@@ -27,8 +26,8 @@ package object data {
   implicit val mapperActivity: MapConvert[Activity] = new MapConvert[Activity] {
     def conv(values: Map[String, Any]): Activity = Activity(
       values.get("content").get.toString,
-    values.get("duration").get.toString.toFloat
-  )
+      values.get("duration").get.toString.toFloat
+    )
   }
 
   implicit val mapperBlocker: MapConvert[Blocker] = new MapConvert[Blocker] {
@@ -43,11 +42,11 @@ package object data {
         values.get("id").get.toString,
         values.get("title").get.toString,
         values.get("content").get.toString,
-        collectionAsScalaIterable(values.get("tags").get.asInstanceOf[java.util.List[String]]).toList,
-        mapAsScalaMap(values.get("modifiedBy").get.asInstanceOf[java.util.Map[String, Any]]).toMap.convert[User],
+        values.get("tags").get.asInstanceOf[Seq[String]].toList,
+        values.get("modifiedBy").get.asInstanceOf[Map[String, Any]].convert[User],
         Instant.parse(values.get("modified").get.toString),
-        collectionAsScalaIterable(values.getOrElse("comments", new java.util.ArrayList).asInstanceOf[java.util.Collection[java.util.Map[String, Any]]]).toList.map {mapAsScalaMap(_).toMap.convert[Comment]},
-        collectionAsScalaIterable(values.getOrElse("attachments", new java.util.ArrayList).asInstanceOf[java.util.List[java.util.Map[String, Any]]]).toList.map {mapAsScalaMap(_).toMap.convert[Attachment]}
+        values.getOrElse("comments", List()).asInstanceOf[Seq[Map[String, Any]]].toList.map {_.convert[Comment]},
+        values.getOrElse("attachments", List()).asInstanceOf[Seq[Map[String, Any]]].toList.map {_.convert[Attachment]}
       )
   }
 
@@ -56,12 +55,12 @@ package object data {
       Report(
         v.get("id").get.toString,
         Instant.parse(v.get("date").get.toString),
-        collectionAsScalaIterable(v.get("activities").get.asInstanceOf[java.util.List[java.util.Map[String, Any]]]).toList.map {mapAsScalaMap(_).toMap.convert[Activity]},
-        collectionAsScalaIterable(v.get("blockers").get.asInstanceOf[java.util.List[java.util.Map[String, Any]]]).toList.map {mapAsScalaMap(_).toMap.convert[Blocker]},
-        mapAsScalaMap(v.get("modifiedBy").get.asInstanceOf[java.util.Map[String, Any]]).toMap.convert[User],
+        v.get("activities").get.asInstanceOf[Seq[Map[String, Any]]].toList.map {_.convert[Activity]},
+        v.get("blockers").get.asInstanceOf[Seq[Map[String, Any]]].toList.map {_.convert[Blocker]},
+        v.get("modifiedBy").get.asInstanceOf[Map[String, Any]].convert[User],
         Instant.parse(v.get("modified").get.toString),
-        collectionAsScalaIterable(v.getOrElse("attachments", new java.util.ArrayList).asInstanceOf[java.util.List[Map[String, Any]]]).toList.map {_.convert[Attachment]},
-        collectionAsScalaIterable(v.getOrElse("comments", new java.util.ArrayList).asInstanceOf[java.util.Collection[java.util.Map[String, Any]]]).toList.map {mapAsScalaMap(_).toMap.convert[Comment]}
+        v.getOrElse("attachments", List()).asInstanceOf[Seq[Map[String, Any]]].toList.map {_.convert[Attachment]},
+        v.getOrElse("comments", List()).asInstanceOf[Seq[Map[String, Any]]].toList.map {_.convert[Comment]}
       )
   }
 
@@ -72,9 +71,9 @@ package object data {
         v.get("targetId").get.toString,
         v.get("targetType").get.toString,
         v.get("content").get.toString,
-        mapAsScalaMap(v.get("modifiedBy").get.asInstanceOf[java.util.Map[String, Any]]).toMap.convert[User],
+        v.get("modifiedBy").get.asInstanceOf[Map[String, Any]].convert[User],
         Instant.parse(v.get("modified").get.toString),
-        collectionAsScalaIterable(v.get("attachments").get.asInstanceOf[java.util.List[Map[String, Any]]]).toList.map {_.convert[Attachment]}
+        v.get("attachments").get.asInstanceOf[Seq[Map[String, Any]]].toList.map {_.convert[Attachment]}
       )
   }
 }

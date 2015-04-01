@@ -6,13 +6,6 @@ import scala.concurrent.Await
 import scala.concurrent.Future
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.util.Try
-import com.sksamuel.elastic4s.ElasticClient
-import com.sksamuel.elastic4s.source.DocumentMap
-import com.sksamuel.elastic4s.ElasticDsl._
-import com.sksamuel.elastic4s.mappings.FieldType._
-import org.elasticsearch.action.get.GetResponse
-import org.elasticsearch.search.sort.SortOrder
-import org.elasticsearch.common.settings.ImmutableSettings
 import scala.collection.JavaConversions._
 import scala.collection.JavaConverters._
 import java.time.Instant
@@ -38,8 +31,8 @@ trait ReportRepository extends Repository[Report] {
 
 trait CommentRepository extends Repository[Comment]
 
-trait EsRepository[T<:DocumentMap with Entity] extends Repository[T] {
-  import EsRepository._
+trait EsRepository[T<:Entity] extends Repository[T] {
+  import EsClient._
 
   val indexName: String
   val docType: String
@@ -49,56 +42,45 @@ trait EsRepository[T<:DocumentMap with Entity] extends Repository[T] {
 
   def find(tid: String): Future[Option[T]] =
     for {
-      c <- client.execute { get id tid from indexName -> docType }
-      m <- Future.successful { c.getSource.toMap }
-      r <- client.execute { search in "prime" -> "comments" query termQuery ("targetId", tid) sort { by field "_timestamp" order SortOrder.DESC }}
-      z <- Future.successful { (m + ("comments" -> r.getHits.map(_.getSource).asJava)).convert[T] }
+      m <- get (docType, tid)
+      r <- query ("comments", Map( "query" -> Map("term" -> Map ("targetId" -> tid), "sort" -> Map("_timestamp" -> Map("order" -> "desc")))))
+      z <- Future.successful { (m.get + ("comments" -> r)).convert[T] }
     } yield Some(z)
 
-  def findAll(offset: Int, limit: Int, query:Option[String]=None): Future[List[T]] =
+  def findAll(offset: Int, limit: Int, q:Option[String]=None): Future[List[T]] =
       for {
-        r <- client.execute { search in indexName -> docType query termQuery("typeId", typeId) sort { by field "_timestamp" order SortOrder.DESC } }
-        c <- Future.successful { r.getHits.getHits }
-        u <- client.execute { search in "prime" -> "comments" query termsQuery ("targetId", c.map(_.getId):_*) sort { by field "_timestamp" order SortOrder.DESC }}
+        c <- query(docType, Map("query" -> Map("term" -> Map ("typeId" -> typeId)), "sort" -> Map("_timestamp" -> Map("order" -> "desc"))))
+        u <- query("comments", Map("query" -> Map("terms" -> Map("targetId" -> c.map(_.get("id").get))), "sort" -> Map("_timestamp" -> Map("order" -> "desc")) ))
         x <- Future.successful { c.map(h => {
-          val xx = u.getHits.map(_.getSource).filter(_.get("targetId") == h.getId())
-          h.getSource.put("comments", xx.asJava)
-          h.getSource
+          val xx = u.filter(_.get("targetId") == h.get("id"))
+          h + ("comments" -> xx )
         }) }
-      } yield x.map(_.toMap.convert[T]).toList
+      } yield x.map(_.convert[T]).toList
 
   def save(t: T): Future[Try[Unit]] =
     for {
-      x <- client.execute(index into "prime_rev" -> docType doc t)
-      c <- client.execute(index into indexName -> docType doc t id t.getId)
+      x <- esSave("primve_rev", docType, t.map)
+      c <- put(docType, t.getId, t.map)
     } yield scala.util.Success(())
 
-  def del(tid: String): Future[Try[Unit]] =
-    for {
-      c <- client.execute(delete id tid from indexName -> docType)
-    } yield scala.util.Success(())
+  def del(tid: String): Future[Try[Unit]] = ???
+
 }
 
 object EsRepository {
-  val client = ElasticClient.remote("localhost", 9300)
-  //val settings = ImmutableSettings.settingsBuilder()
-  //  .put("http.enabled", true)
-  //  .put("node.local", true)
-  //val client = ElasticClient.local(settings.build)
+  import EsClient._
 
-  def query(q: String, offset: Int, size: Int): Future[SearchResult] =
+  def esQuery(q: String, offset: Int, size: Int): Future[SearchResult] =
     for {
-      r <- client.execute { search in "prime" -> "documents" query q }
-      x <- Future.successful { r.getHits.getHits.map(_.getSource).toList }
-      } yield (SearchResult.apply _)
-        .tupled(
-          x.map(_.toMap)
-          .partition(
-            _.get("typeId") == Some("article")) match {
-                case (m, n) =>
-                  (m.map(_.convert[Article]), n.map(_.convert[Report]))
-              })
-
+      r <- query("documents", Map("query"-> Map("query_string" -> Map("query" -> q))))
+    } yield (SearchResult.apply _)
+      .tupled(
+        r.partition(
+          _.get("typeId") == Some("article")) match {
+            case (m, n) =>
+              (m.map(_.convert[Article]), n.map(_.convert[Report]))
+          })
+/*
   def createIndex(indexName: String) = client.execute {
       create index indexName mappings (
         "documents" source true timestamp true dynamic true dateDetection true dynamicDateFormats("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'") as (
@@ -131,5 +113,5 @@ object EsRepository {
     case e: Throwable => {
       println (e)
     }
-  }
+  }*/
 }

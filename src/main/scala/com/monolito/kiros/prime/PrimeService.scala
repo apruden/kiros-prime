@@ -230,7 +230,7 @@ trait PrimeService extends HttpService with CORSSupport { self: MyAppContextAwar
   def search(q: String, offset: Int = 0, size:Int = 20): MyAppContext #> SearchResult = {
     ReaderTFuture { ctx =>
       for {
-        r <- query(q, offset, size)
+        r <- esQuery(q, offset, size)
       } yield r
     }
   }

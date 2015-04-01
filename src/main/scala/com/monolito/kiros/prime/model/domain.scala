@@ -2,11 +2,12 @@ package com.monolito.kiros.prime.model
 
 import java.time.Instant
 import scala.collection.JavaConverters._
-import com.sksamuel.elastic4s.source.DocumentMap
 
 
 trait Entity {
   def getId: String
+
+  def map: Map[String, Any] = Map()
 }
 
 case class Article (
@@ -18,16 +19,16 @@ case class Article (
   modified: Instant,
   comments: List[Comment],
   attachments: List[Attachment]
-) extends DocumentMap with Entity {
+) extends Entity {
   override def map = Map[String, Any](
     "id" -> id,
     "typeId" -> "article",
     "title" -> title,
     "content" -> content,
-    "tags" -> tags.toArray,
-    "modifiedBy" -> modifiedBy.asInstanceOf[DocumentMap].map.asJava,
+    "tags" -> tags,
+    "modifiedBy" -> modifiedBy.asInstanceOf[Entity].map,
     "modified" -> modified.toString,
-    "attachments" -> attachments.map(x => x.asInstanceOf[DocumentMap].map.asJava).toArray
+    "attachments" -> attachments.map(_.asInstanceOf[Entity].map)
   )
 
   def getId = id
@@ -36,7 +37,9 @@ case class Article (
 case class Activity (
   content: String,
   duration: Float
-  ) extends DocumentMap {
+  ) extends Entity{
+  def getId = content
+
   override def map = Map (
     "content" -> content,
     "duration" -> duration
@@ -45,7 +48,9 @@ case class Activity (
 
 case class Blocker (
   content: String
-  ) extends DocumentMap {
+  ) extends Entity {
+  def getId = content
+
   override def map = Map (
     "content" -> content
     )
@@ -60,16 +65,17 @@ case class Report (
   modified: Instant,
   attachments: List[Attachment],
   comments: List[Comment]
-) extends DocumentMap with Entity {
+) extends Entity {
+
   override def map = Map[String, Any](
     "id" -> id,
     "typeId" -> "report",
     "date" -> date.toString,
-    "activities" -> activities.map(x => x.asInstanceOf[DocumentMap].map.asJava).toArray,
-    "blockers" -> blockers.map(x => x.asInstanceOf[DocumentMap].map.asJava).toArray,
-    "modifiedBy" -> modifiedBy.asInstanceOf[DocumentMap].map.asJava,
+    "activities" -> activities.map(_.asInstanceOf[Entity].map),
+    "blockers" -> blockers.map(_.asInstanceOf[Entity].map),
+    "modifiedBy" -> modifiedBy.asInstanceOf[Entity].map,
     "modified" -> modified.toString,
-    "attachments" -> attachments.map(x => x.asInstanceOf[DocumentMap].map.asJava).toArray
+    "attachments" -> attachments.map(_.asInstanceOf[Entity].map)
   )
 
   def getId = id
@@ -83,16 +89,16 @@ case class Comment (
   modifiedBy: User,
   modified: Instant,
   attachments: List[Attachment]
-) extends DocumentMap with Entity {
+) extends Entity {
 
   override def map = Map[String, Any](
     "id" -> id,
     "targetId" -> targetId,
     "targetType" -> targetType,
     "content" -> content,
-    "modifiedBy" -> modifiedBy.asInstanceOf[DocumentMap].map.asJava,
+    "modifiedBy" -> modifiedBy.asInstanceOf[Entity].map,
     "modified" -> modified.toString,
-    "attachments" -> attachments.map(x => x.asInstanceOf[DocumentMap].map.asJava).toArray
+    "attachments" -> attachments.map(_.asInstanceOf[Entity].map)
   )
 
   def getId = id
@@ -102,7 +108,10 @@ case class Attachment (
   id: String,
   filename: String,
   modified: Instant
-) extends DocumentMap {
+) extends Entity {
+
+  def getId = id
+
   override def map = Map (
     "id" -> id,
     "filename" -> filename,
@@ -113,7 +122,10 @@ case class Attachment (
 case class User (
   userId: String,
   username: String
-) extends DocumentMap {
+) extends Entity {
+
+  def getId = userId
+
   override def map = Map (
     "userId" -> userId,
     "username" -> username
