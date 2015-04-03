@@ -74,7 +74,6 @@ object EsClient {
   def del (typ: String, id: String): Future[Unit] = ???
 
   def query (typ: String, query: Map[String, Any]): Future[List[Map[String, Any]]] = {
-    println (query)
     for {
       d <- pipeline { Post(s"$host/$typ/_search", query) }
       r <- Future {

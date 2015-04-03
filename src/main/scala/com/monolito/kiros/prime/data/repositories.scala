@@ -43,7 +43,7 @@ trait EsRepository[T<:Entity] extends Repository[T] {
   def find(tid: String): Future[Option[T]] =
     for {
       m <- get (docType, tid)
-      r <- query ("comments", Map( "query" -> Map("term" -> Map ("targetId" -> tid), "sort" -> Map("_timestamp" -> Map("order" -> "desc")))))
+      r <- query ("comments", Map( "query" -> Map("term" -> Map ("targetId" -> tid)), "sort" -> Map("_timestamp" -> Map("order" -> "desc"))))
       z <- Future.successful { (m.get + ("comments" -> r)).convert[T] }
     } yield Some(z)
 

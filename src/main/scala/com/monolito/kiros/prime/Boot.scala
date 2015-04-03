@@ -9,7 +9,7 @@ import scala.concurrent.duration._
 import spray.io.ServerSSLEngineProvider
 
 
-object Boot extends App with PrimeSslConfiguration {
+object Boot extends App { //with PrimeSslConfiguration {
 
   implicit val system = ActorSystem("on-spray-can")
 
