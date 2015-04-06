@@ -111,10 +111,11 @@ trait PrimeService extends HttpService with CORSSupport { self: MyAppContextAwar
           entity(as[MultipartFormData]) { formData =>
               complete {
                 val fileNames = formData.fields.map {
-                  case BodyPart(entity, headers) =>
-                    val tmp = java.util.UUID.randomUUID.toString
-                    saveAttachment(tmp, new ByteArrayInputStream(entity.data.toByteArray))
-                    tmp
+                  case bp: BodyPart =>
+                    val savedFilename = java.util.UUID.randomUUID.toString
+                    saveAttachment(savedFilename, bp.filename, bp.entity.data.toByteArray)
+                    //saveAttachment(savedFilename, new ByteArrayInputStream(bp.entity.data.toByteArray), bp.filename)
+                    savedFilename
                 }
 
                 JsObject("fileNames" -> new JsArray(fileNames.map(JsString(_)).toVector))
@@ -265,18 +266,26 @@ trait PrimeService extends HttpService with CORSSupport { self: MyAppContextAwar
   def deleteArticle(id: String): MyAppContext #> Try[Unit] =
     ReaderTFuture { (r: MyAppContext) => r.articles.del(id) }
 
-  private def saveAttachment(fileName: String, content: InputStream): Boolean =
+  private def saveAttachment(savedFilename: String, fileName: Option[String], content: Array[Byte]): Future[Unit] = {
+    import java.nio.file.Files
+    import java.nio.file.Paths
+    import S3Client._
+
+    putObject(savedFilename, content, Files.probeContentType(Paths.get(fileName.getOrElse("filename.bin"))))
+  }
+
+  private def saveAttachment(fileName: String, content: InputStream, filename: Option[String]): Boolean =
     saveAttachment[InputStream](fileName, content, {(is, os) =>
       val buffer = new Array[Byte](16384)
       Iterator
         .continually (is.read(buffer))
         .takeWhile (-1 !=)
-        .foreach (read => os.write(buffer,0,read))
+        .foreach (os.write(buffer, 0, _))
     })
 
   private def saveAttachment[T](fileName: String, content: T, writeFile: (T, OutputStream) => Unit): Boolean =
     try {
-      val fos = new java.io.FileOutputStream("/home/alex/" + fileName)
+      val fos = new java.io.FileOutputStream(conf.getString("kiros.prime.temp-path") + fileName)
       writeFile(content, fos)
       fos.close()
       true

@@ -36,20 +36,21 @@ object EsJsonProtocol extends DefaultJsonProtocol {
 }
 
 object EsClient {
+  import com.monolito.kiros.prime.conf
   import concurrent.ExecutionContext.Implicits._
   import SprayJsonSupport._
   import EsJsonProtocol._
 
   implicit val system = ActorSystem()
 
-  val hostRoot = "http://localhost:9200"
-  val host = "http://localhost:9200/prime"
+  val hostRoot = conf.getString("kiros.prime.index-root")
+  val host = conf.getString("kiros.prime.index-url")
 
   val pipeline: HttpRequest => Future[Map[String, Any]] = sendReceive ~> unmarshal[Map[String,Any]]
 
   def createIndex (mapping: Map[String, Any]): Future[Unit] =
   for {
-    a <- pipeline { Put(host, mapping)}
+    a <- pipeline { Post(host, mapping)}
     r <- Future {()}
   } yield r
 

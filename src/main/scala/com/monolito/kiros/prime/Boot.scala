@@ -10,6 +10,8 @@ import spray.io.ServerSSLEngineProvider
 
 
 object Boot extends App { //with PrimeSslConfiguration {
+  import com.monolito.kiros.prime.conf
+  import data.EsRepository._
 
   implicit val system = ActorSystem("on-spray-can")
 
@@ -17,5 +19,7 @@ object Boot extends App { //with PrimeSslConfiguration {
 
   implicit val timeout = Timeout(5.seconds)
 
-  IO(Http) ? Http.Bind(service, interface = "localhost", port = 20001)
+  tryCreateIndex()
+
+  IO(Http) ? Http.Bind(service, interface = conf.getString("kiros.prime.host"), port = conf.getInt("kiros.prime.port"))
 }

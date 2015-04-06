@@ -59,7 +59,7 @@ trait EsRepository[T<:Entity] extends Repository[T] {
 
   def save(t: T): Future[Try[Unit]] =
     for {
-      x <- esSave("primve_rev", docType, t.map)
+      x <- esSave("prime_rev", docType, t.map)
       c <- put(docType, t.getId, t.map)
     } yield scala.util.Success(())
 
@@ -80,38 +80,52 @@ object EsRepository {
             case (m, n) =>
               (m.map(_.convert[Article]), n.map(_.convert[Report]))
           })
-/*
-  def createIndex(indexName: String) = client.execute {
-      create index indexName mappings (
-        "documents" source true timestamp true dynamic true dateDetection true dynamicDateFormats("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'") as (
-          "id" typed StringType index "not_analyzed",
-          "typeId" typed StringType index "not_analyzed",
-          "modifiedBy" typed ObjectType as (
-            "userId" typed StringType index "not_analyzed",
-            "username" typed StringType index "not_analyzed"
-            ),
-          "attachments" typed NestedType as (
-            "id" typed StringType index "not_analyzed"
+
+  def tryCreateIndex() = {
+    println("creating index ....")
+    createIndex(Map("settings" -> Map(
+      "number_of_shards" -> 1,
+      "number_of_replicas" -> 1
+      ),
+      "mappings" -> Map(
+        "documents" -> Map(
+          "_timestamp" -> Map ("enabled" -> true),
+          "date_detection" -> true,
+          "dynamic_date_formats" -> "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'",
+          "properties" -> Map(
+            "id" -> Map("type" -> "string", "index"-> "not_analyzed"),
+            "typedId" -> Map("type" -> "string", "index"-> "not_analyzed"),
+            "modifiedBy" -> Map("type" -> "object",
+                "properties" -> Map(
+                  "userId" -> Map("type" -> "string", "index"-> "not_analyzed"),
+                  "username" -> Map("type" -> "string", "index"-> "not_analyzed")
+                  )
+              ),
+            "attachments" -> Map("type" -> "nested",
+                "properties" -> Map(
+                  "id" -> Map("type" -> "string", "index"-> "not_analyzed")
+                  )
+              )
           )
         ),
-      "comments" source true timestamp true dynamic true dateDetection true dynamicDateFormats("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'") as (
-        "id" typed StringType index "not_analyzed",
-        "targetId" typed StringType index "not_analyzed",
-        "modifiedBy" typed ObjectType as (
-          "userId" typed StringType index "not_analyzed",
-          "username" typed StringType index "not_analyzed"
+        "comments" -> Map(
+          "_timestamp" -> Map ("enabled" -> true),
+          "date_detection" -> true,
+          "dynamic_date_formats" -> "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'",
+          "properties" -> Map(
+            "id" -> Map("type" -> "string", "index"-> "not_analyzed"),
+            "targetId" -> Map("type" -> "string", "index"-> "not_analyzed"),
+            "modifiedBy" -> Map("type" -> "object",
+                "properties" -> Map(
+                  "userId" -> Map("type" -> "string", "index"-> "not_analyzed"),
+                  "username" -> Map("type" -> "string", "index"-> "not_analyzed")
+                  )
+            )
+          )
         )
       )
-      ) shards 1 replicas 1
-    }.await
-
-  try {
-    if (!client.execute { status() }.await.getIndices().contains("prime"))
-      createIndex("prime")
-      createIndex("prime_rev")
-  } catch {
-    case e: Throwable => {
-      println (e)
-    }
-  }*/
+    )
+  )
+    ()
+  }
 }
