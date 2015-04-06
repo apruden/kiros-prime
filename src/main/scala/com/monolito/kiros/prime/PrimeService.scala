@@ -30,6 +30,8 @@ import spray.httpx.marshalling.Marshaller
 
 import SprayJsonSupport._
 
+import com.fasterxml.uuid.Generators
+
 
 class PrimeServiceActor extends Actor with PrimeService with ProdMyAppContextAware {
   import CustomRejectionHandler._
@@ -91,6 +93,7 @@ trait PrimeService extends HttpService with CORSSupport { self: MyAppContextAwar
   import WikiJsonProtocol._
   import com.monolito.kiros.prime.conf
   val rootPath = conf.getString("kiros.prime.root-path")
+  val generator = Generators.timeBasedGenerator()
   val appContext: MyAppContext
 
   val authenticated: Directive1[OAuthCred] = authenticate(OAuth2Auth(validateToken, "prime"))
@@ -109,16 +112,9 @@ trait PrimeService extends HttpService with CORSSupport { self: MyAppContextAwar
       cors {
       path("assets")  {
           entity(as[MultipartFormData]) { formData =>
-              complete {
-                val fileNames = formData.fields.map {
-                  case bp: BodyPart =>
-                    val savedFilename = java.util.UUID.randomUUID.toString
-                    saveAttachment(savedFilename, bp.filename, bp.entity.data.toByteArray)
-                    //saveAttachment(savedFilename, new ByteArrayInputStream(bp.entity.data.toByteArray), bp.filename)
-                    savedFilename
-                }
-
-                JsObject("fileNames" -> new JsArray(fileNames.map(JsString(_)).toVector))
+              onComplete (saveAttachment(formData)) {
+                case scala.util.Success(fileNames) => complete(JsObject("fileNames" -> new JsArray(fileNames.map(JsString(_)).toVector)))
+                case scala.util.Failure(ex) => complete (StatusCodes.InternalServerError, s"Error saving files ${ex.getMessage}")
               }
         }
       } ~
@@ -237,7 +233,7 @@ trait PrimeService extends HttpService with CORSSupport { self: MyAppContextAwar
   }
 
   def addComment(comment:Comment): MyAppContext #> Try[Unit] = {
-    val commentToSave = if (comment.id == "") comment.copy(id = java.util.UUID.randomUUID.toString) else comment
+    val commentToSave = if (comment.id == "") comment.copy(id = generator.generate().toString) else comment
     ReaderTFuture { ctx: MyAppContext =>
       for {
         r <- if (comment.targetType == "article")
@@ -257,7 +253,7 @@ trait PrimeService extends HttpService with CORSSupport { self: MyAppContextAwar
     ReaderTFuture(ctx => ctx.articles.find(id))
 
   def saveOrUpdateArticle(article: Article, cred: OAuthCred): MyAppContext #> Try[Unit] = {
-    val articleToSave = article.copy(id=if (article.id == "") java.util.UUID.randomUUID.toString else article.id, modified=java.time.Instant.now)
+    val articleToSave = article.copy(id=if (article.id == "") generator.generate().toString else article.id, modified=java.time.Instant.now)
     for {
       c <- ReaderTFuture { (ctx: MyAppContext) => ctx.articles.save(articleToSave) }
     } yield c
@@ -265,6 +261,20 @@ trait PrimeService extends HttpService with CORSSupport { self: MyAppContextAwar
 
   def deleteArticle(id: String): MyAppContext #> Try[Unit] =
     ReaderTFuture { (r: MyAppContext) => r.articles.del(id) }
+
+  def saveAttachment(formData: MultipartFormData): Future[List[String]] = {
+    val fileNames = formData.fields.map {
+      case bp: BodyPart =>
+        val savedFilename = generator.generate().toString
+        for {
+          r <- saveAttachment(savedFilename, bp.filename, bp.entity.data.toByteArray)
+          q <- Future.successful { savedFilename }
+        } yield q
+        //saveAttachment(savedFilename, new ByteArrayInputStream(bp.entity.data.toByteArray), bp.filename)
+    }
+
+    Future.sequence(fileNames.toList)
+  }
 
   private def saveAttachment(savedFilename: String, fileName: Option[String], content: Array[Byte]): Future[Unit] = {
     import java.nio.file.Files
@@ -300,7 +310,7 @@ trait PrimeService extends HttpService with CORSSupport { self: MyAppContextAwar
     ReaderTFuture(ctx => ctx.reports.find(id))
 
   def saveOrUpdateReport(report: Report, cred: OAuthCred): MyAppContext #> Try[Unit] = {
-    val reportToSave = report.copy(id=if (report.id == "") java.util.UUID.randomUUID.toString else report.id, modified=java.time.Instant.now)
+    val reportToSave = report.copy(id=if (report.id == "") generator.generate().toString else report.id, modified=java.time.Instant.now)
     for {
       c <- ReaderTFuture { (ctx: MyAppContext) => ctx.reports.save(reportToSave) }
     } yield c
