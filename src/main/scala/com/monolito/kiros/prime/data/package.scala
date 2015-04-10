@@ -55,6 +55,8 @@ package object data {
       Report(
         v.get("id").get.toString,
         Instant.parse(v.get("date").get.toString),
+        v.getOrElse("client", "N/A").toString,
+        v.getOrElse("team", "N/A").toString,
         v.get("activities").get.asInstanceOf[Seq[Map[String, Any]]].toList.map {_.convert[Activity]},
         v.get("blockers").get.asInstanceOf[Seq[Map[String, Any]]].toList.map {_.convert[Blocker]},
         v.get("modifiedBy").get.asInstanceOf[Map[String, Any]].convert[User],

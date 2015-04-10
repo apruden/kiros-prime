@@ -81,6 +81,18 @@ object EsRepository {
               (m.map(_.convert[Article]), n.map(_.convert[Report]))
           })
 
+  def fieldAgg(field: String): Future[List[Map[String, Any]]] =
+    for {
+      r <- aggs("documents", Map("aggs"->
+        Map("result" ->
+          Map("terms" ->
+            Map("field" -> field)
+            )
+          )
+        )
+      )
+    } yield r
+
   def tryCreateIndex() = {
     println("creating index ....")
     createIndex(Map("settings" -> Map(

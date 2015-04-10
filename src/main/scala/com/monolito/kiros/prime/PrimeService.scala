@@ -51,13 +51,34 @@ object WikiJsonProtocol extends DefaultJsonProtocol {
     }
   }
 
+  implicit object AnyJsonFormat extends JsonFormat[Any] {
+    def write(x: Any) = x match {
+      case n: Int => JsNumber(n)
+      case s: String => JsString(s)
+      case b: Boolean => if (b ) JsTrue else JsFalse
+      case q: Seq[Any] => JsArray(q.map(write(_)).toVector)
+      case o: Map[String, Any] => JsObject(o.map(e => (e._1, write(e._2))))
+      case x => JsString(x.toString)
+    }
+
+    def read(value: JsValue): Any = value match {
+      case JsNumber(n) => n.intValue()
+      case JsString(s) => s
+      case JsTrue => true
+      case JsFalse => false
+      case x: JsArray => x.elements.map(read(_))
+      case JsNull => null
+      case o: JsObject => o.fields.map(e => (e._1, read(e._2)))
+    }
+  }
+
   implicit val userFormat = jsonFormat2(User)
   implicit val attachmentFormat = jsonFormat3(Attachment)
   implicit val commentFormat = jsonFormat7(Comment)
   implicit val activityFormat = jsonFormat2(Activity)
   implicit val blockerFormat = jsonFormat1(Blocker)
   implicit val articleFormat = jsonFormat8(Article)
-  implicit val reportFormat = jsonFormat8(Report)
+  implicit val reportFormat = jsonFormat10(Report)
   implicit val resultFormat = jsonFormat2(SearchResult)
 
   /*implicit object AnyJsonFormat extends JsonFormat[Any] {
@@ -119,10 +140,20 @@ trait PrimeService extends HttpService with CORSSupport { self: MyAppContextAwar
         }
       } ~
       path("search") {
-        get {
-          parameters('offset.as[Int] ? 0, 'length.as[Int] ? 20, 'query.as[String]) {
-            (offset, length, query) =>
-              complete(search(query, offset, length)(appContext))
+        pathEnd {
+          get {
+            parameters('offset.as[Int] ? 0, 'length.as[Int] ? 20, 'query.as[String]) {
+              (offset, length, query) =>
+                complete(search(query, offset, length)(appContext))
+            }
+          }
+        } ~
+        pathPrefix ("agg") {
+          get {
+            parameters('field.as[String]) {
+              field =>
+                complete(getAgg(field)(appContext))
+            }
           }
         }
       } ~
@@ -224,13 +255,19 @@ trait PrimeService extends HttpService with CORSSupport { self: MyAppContextAwar
       }
     }
 
-  def search(q: String, offset: Int = 0, size:Int = 20): MyAppContext #> SearchResult = {
+  def search(q: String, offset: Int = 0, size:Int = 20): MyAppContext #> SearchResult =
     ReaderTFuture { ctx =>
       for {
         r <- esQuery(q, offset, size)
       } yield r
     }
-  }
+
+  def getAgg(field: String): MyAppContext #> List[Map[String, Any]] =
+    ReaderTFuture { ctx =>
+      for {
+        r <- fieldAgg(field)
+      } yield r
+    }
 
   def addComment(comment:Comment): MyAppContext #> Try[Unit] = {
     val commentToSave = if (comment.id == "") comment.copy(id = generator.generate().toString) else comment
@@ -253,6 +290,9 @@ trait PrimeService extends HttpService with CORSSupport { self: MyAppContextAwar
     ReaderTFuture(ctx => ctx.articles.find(id))
 
   def saveOrUpdateArticle(article: Article, cred: OAuthCred): MyAppContext #> Try[Unit] = {
+    if (article.id != "" &&  cred.id =/= article.modifiedBy.userId )
+      throw new Exception("Unauthorized Error")
+
     val articleToSave = article.copy(id=if (article.id == "") generator.generate().toString else article.id, modified=java.time.Instant.now)
     for {
       c <- ReaderTFuture { (ctx: MyAppContext) => ctx.articles.save(articleToSave) }

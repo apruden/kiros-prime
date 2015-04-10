@@ -59,6 +59,8 @@ case class Blocker (
 case class Report (
   id: String,
   date: Instant,
+  client: String,
+  team: String,
   activities: List[Activity],
   blockers: List[Blocker],
   modifiedBy: User,
@@ -70,6 +72,8 @@ case class Report (
   override def map = Map[String, Any](
     "id" -> id,
     "typeId" -> "report",
+    "client" -> client,
+    "team" -> team,
     "date" -> date.toString,
     "activities" -> activities.map(_.asInstanceOf[Entity].map),
     "blockers" -> blockers.map(_.asInstanceOf[Entity].map),

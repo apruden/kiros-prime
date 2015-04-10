@@ -82,4 +82,13 @@ object EsClient {
       }
     } yield r
   }
+
+  def aggs (typ: String, query: Map[String, Any]): Future[List[Map[String, Any]]] = {
+    for {
+      d <- pipeline { Post(s"$host/$typ/_search", query) }
+      r <- Future {
+        d.getOrElse("aggregations", Map()).asInstanceOf[Map[String, Any]].getOrElse("buckets", List()).asInstanceOf[Seq[Map[String, Any]]].toList
+      }
+    } yield r
+  }
 }
