@@ -69,16 +69,19 @@ object EsClient {
   def get (typ: String, id: String): Future[Option[Map[String, Any]]] =
     for {
       d <- pipeline { Get(s"$host/$typ/$id") }
-      r <- Future { d.get("_source").asInstanceOf[Option[Map[String, Any]]] }
+      r <- Future { d.get("_source").asInstanceOf[Option[Map[String, Any]]]
+        .flatMap(e => Some(e + ("_version" -> d.getOrElse("_version", 1)))) }
     } yield r
 
   def del (typ: String, id: String): Future[Unit] = ???
 
   def query (typ: String, query: Map[String, Any]): Future[List[Map[String, Any]]] = {
     for {
-      d <- pipeline { Post(s"$host/$typ/_search", query) }
+      d <- pipeline { Post(s"$host/$typ/_search", query + ("version" -> true) )}
       r <- Future {
-        d.getOrElse("hits", Map()).asInstanceOf[Map[String, Any]].getOrElse("hits", List()).asInstanceOf[Seq[Map[String, Any]]].map(_.get("_source").get.asInstanceOf[Map[String, Any]]).toList
+        d.getOrElse("hits", Map()).asInstanceOf[Map[String, Any]]
+          .getOrElse("hits", List()).asInstanceOf[Seq[Map[String, Any]]]
+          .map(h => h.get("_source").get.asInstanceOf[Map[String, Any]] + ("_version" -> h.getOrElse("_version", 1))).toList
       }
     } yield r
   }

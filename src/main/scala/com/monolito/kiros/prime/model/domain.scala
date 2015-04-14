@@ -15,10 +15,12 @@ case class Article (
   title: String,
   content: String,
   tags: List[String],
+  createdBy: User,
   modifiedBy: User,
   modified: Instant,
   comments: List[Comment],
-  attachments: List[Attachment]
+  attachments: List[Attachment],
+  version: Option[Int]
 ) extends Entity {
   override def map = Map[String, Any](
     "id" -> id,
@@ -26,6 +28,7 @@ case class Article (
     "title" -> title,
     "content" -> content,
     "tags" -> tags,
+    "createdBy" -> createdBy.asInstanceOf[Entity].map,
     "modifiedBy" -> modifiedBy.asInstanceOf[Entity].map,
     "modified" -> modified.toString,
     "attachments" -> attachments.map(_.asInstanceOf[Entity].map)
@@ -63,10 +66,12 @@ case class Report (
   team: String,
   activities: List[Activity],
   blockers: List[Blocker],
+  createdBy: User,
   modifiedBy: User,
   modified: Instant,
   attachments: List[Attachment],
-  comments: List[Comment]
+  comments: List[Comment],
+  version: Option[Int]
 ) extends Entity {
 
   override def map = Map[String, Any](
@@ -77,6 +82,7 @@ case class Report (
     "date" -> date.toString,
     "activities" -> activities.map(_.asInstanceOf[Entity].map),
     "blockers" -> blockers.map(_.asInstanceOf[Entity].map),
+    "createdBy" -> createdBy.asInstanceOf[Entity].map,
     "modifiedBy" -> modifiedBy.asInstanceOf[Entity].map,
     "modified" -> modified.toString,
     "attachments" -> attachments.map(_.asInstanceOf[Entity].map)

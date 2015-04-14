@@ -77,8 +77,8 @@ object WikiJsonProtocol extends DefaultJsonProtocol {
   implicit val commentFormat = jsonFormat7(Comment)
   implicit val activityFormat = jsonFormat2(Activity)
   implicit val blockerFormat = jsonFormat1(Blocker)
-  implicit val articleFormat = jsonFormat8(Article)
-  implicit val reportFormat = jsonFormat10(Report)
+  implicit val articleFormat = jsonFormat10(Article)
+  implicit val reportFormat = jsonFormat12(Report)
   implicit val resultFormat = jsonFormat2(SearchResult)
 
   /*implicit object AnyJsonFormat extends JsonFormat[Any] {
@@ -294,6 +294,7 @@ trait PrimeService extends HttpService with CORSSupport { self: MyAppContextAwar
       throw new Exception("Unauthorized Error")
 
     val articleToSave = article.copy(id=if (article.id == "") generator.generate().toString else article.id, modified=java.time.Instant.now)
+
     for {
       c <- ReaderTFuture { (ctx: MyAppContext) => ctx.articles.save(articleToSave) }
     } yield c
@@ -351,6 +352,7 @@ trait PrimeService extends HttpService with CORSSupport { self: MyAppContextAwar
 
   def saveOrUpdateReport(report: Report, cred: OAuthCred): MyAppContext #> Try[Unit] = {
     val reportToSave = report.copy(id=if (report.id == "") generator.generate().toString else report.id, modified=java.time.Instant.now)
+
     for {
       c <- ReaderTFuture { (ctx: MyAppContext) => ctx.reports.save(reportToSave) }
     } yield c

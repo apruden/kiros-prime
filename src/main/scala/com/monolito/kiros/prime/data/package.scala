@@ -37,16 +37,18 @@ package object data {
   }
 
   implicit val mapperArticle: MapConvert[Article] = new MapConvert[Article] {
-    def conv(values: Map[String, Any]): Article =
+    def conv(v: Map[String, Any]): Article =
       Article(
-        values.get("id").get.toString,
-        values.get("title").get.toString,
-        values.get("content").get.toString,
-        values.get("tags").get.asInstanceOf[Seq[String]].toList,
-        values.get("modifiedBy").get.asInstanceOf[Map[String, Any]].convert[User],
-        Instant.parse(values.get("modified").get.toString),
-        values.getOrElse("comments", List()).asInstanceOf[Seq[Map[String, Any]]].toList.map {_.convert[Comment]},
-        values.getOrElse("attachments", List()).asInstanceOf[Seq[Map[String, Any]]].toList.map {_.convert[Attachment]}
+        v.get("id").get.toString,
+        v.get("title").get.toString,
+        v.get("content").get.toString,
+        v.get("tags").get.asInstanceOf[Seq[String]].toList,
+        v.get("createdBy").get.asInstanceOf[Map[String, Any]].convert[User],
+        v.get("modifiedBy").get.asInstanceOf[Map[String, Any]].convert[User],
+        Instant.parse(v.get("modified").get.toString),
+        v.getOrElse("comments", List()).asInstanceOf[Seq[Map[String, Any]]].toList.map {_.convert[Comment]},
+        v.getOrElse("attachments", List()).asInstanceOf[Seq[Map[String, Any]]].toList.map {_.convert[Attachment]},
+        v.get("_version").asInstanceOf[Option[Int]]
       )
   }
 
@@ -59,10 +61,12 @@ package object data {
         v.getOrElse("team", "N/A").toString,
         v.get("activities").get.asInstanceOf[Seq[Map[String, Any]]].toList.map {_.convert[Activity]},
         v.get("blockers").get.asInstanceOf[Seq[Map[String, Any]]].toList.map {_.convert[Blocker]},
+        v.get("createdBy").get.asInstanceOf[Map[String, Any]].convert[User],
         v.get("modifiedBy").get.asInstanceOf[Map[String, Any]].convert[User],
         Instant.parse(v.get("modified").get.toString),
         v.getOrElse("attachments", List()).asInstanceOf[Seq[Map[String, Any]]].toList.map {_.convert[Attachment]},
-        v.getOrElse("comments", List()).asInstanceOf[Seq[Map[String, Any]]].toList.map {_.convert[Comment]}
+        v.getOrElse("comments", List()).asInstanceOf[Seq[Map[String, Any]]].toList.map {_.convert[Comment]},
+        v.get("_version").asInstanceOf[Option[Int]]
       )
   }
 
