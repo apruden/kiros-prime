@@ -212,6 +212,8 @@ object S3Client {
   def putObject (key: String, obj: Array[Byte], contentType: String): Future[Unit] = {
     val endpointUrl = new URL(s"http://s3.amazonaws.com/$bucketName/$key")
 
+    println(s">>$contentType<<")
+
     for {
       r <- pipeline (
         getHeaders(

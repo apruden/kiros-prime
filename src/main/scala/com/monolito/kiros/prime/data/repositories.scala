@@ -49,7 +49,7 @@ trait EsRepository[T<:Entity] extends Repository[T] {
 
   def findAll(offset: Int, limit: Int, q:Option[String]=None): Future[List[T]] =
       for {
-        c <- query(docType, Map("query" -> Map("term" -> Map ("typeId" -> typeId)), "sort" -> Map("_timestamp" -> Map("order" -> "desc"))))
+        c <- query(docType, Map("from"->offset, "size"->limit, "query" -> Map("term" -> Map ("typeId" -> typeId)), "sort" -> Map("_timestamp" -> Map("order" -> "desc"))))
         u <- query("comments", Map("query" -> Map("terms" -> Map("targetId" -> c.map(_.get("id").get))), "sort" -> Map("_timestamp" -> Map("order" -> "desc")) ))
         x <- Future.successful { c.map(h => {
           val xx = u.filter(_.get("targetId") == h.get("id"))
@@ -72,7 +72,7 @@ object EsRepository {
 
   def esQuery(q: String, offset: Int, size: Int): Future[SearchResult] =
     for {
-      r <- query("documents", Map("query"-> Map("query_string" -> Map("query" -> q))))
+      r <- query("documents", Map("from"->offset, "size"->size, "query"-> Map("query_string" -> Map("query" -> q))))
     } yield (SearchResult.apply _)
       .tupled(
         r.partition(

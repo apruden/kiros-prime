@@ -79,7 +79,10 @@ case class Report (
     "typeId" -> "report",
     "client" -> client,
     "team" -> team,
-    "date" -> date.toString,
+    "date" -> {
+      val a = java.time.LocalDateTime.ofInstant(date, java.time.ZoneId.of("GMT"))
+      java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS").format(a) + "Z"
+    },
     "activities" -> activities.map(_.asInstanceOf[Entity].map),
     "blockers" -> blockers.map(_.asInstanceOf[Entity].map),
     "createdBy" -> createdBy.asInstanceOf[Entity].map,

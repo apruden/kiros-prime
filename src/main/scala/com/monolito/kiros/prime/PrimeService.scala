@@ -44,7 +44,11 @@ class PrimeServiceActor extends Actor with PrimeService with ProdMyAppContextAwa
 object WikiJsonProtocol extends DefaultJsonProtocol {
   //implicit declaration order matters
   implicit object InstantJsonFormat extends RootJsonFormat[java.time.Instant] {
-    def write(c: java.time.Instant) = JsString(c.toString)
+    def write(c: java.time.Instant) = {
+      val a = java.time.LocalDateTime.ofInstant(c, java.time.ZoneId.of("GMT"))
+      JsString(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS").format(a) + "Z")
+    }
+
     def read(value: JsValue) = value match {
       case JsString(s) => java.time.Instant.parse(s)
       case _ => deserializationError("Valid values is an ISO date")
@@ -55,7 +59,7 @@ object WikiJsonProtocol extends DefaultJsonProtocol {
     def write(x: Any) = x match {
       case n: Int => JsNumber(n)
       case s: String => JsString(s)
-      case b: Boolean => if (b ) JsTrue else JsFalse
+      case b: Boolean => if (b) JsTrue else JsFalse
       case q: Seq[Any] => JsArray(q.map(write(_)).toVector)
       case o: Map[String, Any] => JsObject(o.map(e => (e._1, write(e._2))))
       case x => JsString(x.toString)
@@ -322,7 +326,7 @@ trait PrimeService extends HttpService with CORSSupport { self: MyAppContextAwar
     import java.nio.file.Paths
     import S3Client._
 
-    putObject(savedFilename, content, Files.probeContentType(Paths.get(fileName.getOrElse("filename.bin"))))
+    putObject(savedFilename, content, Files.probeContentType(Paths.get(fileName.getOrElse("filename.bin").toLowerCase)))
   }
 
   private def saveAttachment(fileName: String, content: InputStream, filename: Option[String]): Boolean =
