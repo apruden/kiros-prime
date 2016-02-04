@@ -90,7 +90,7 @@ object EsClient {
     for {
       d <- pipeline { Post(s"$host/$typ/_search", query) }
       r <- Future {
-        d.getOrElse("aggregations", Map()).asInstanceOf[Map[String, Any]].getOrElse("buckets", List()).asInstanceOf[Seq[Map[String, Any]]].toList
+        d.getOrElse("aggregations", Map()).asInstanceOf[Map[String, Any]].getOrElse("result", Map()).asInstanceOf[Map[String, Any]].getOrElse("buckets", List()).asInstanceOf[Seq[Map[String, Any]]].toList
       }
     } yield r
   }

@@ -72,7 +72,7 @@ object EsRepository {
 
   def esQuery(q: String, offset: Int, size: Int): Future[SearchResult] =
     for {
-      r <- query("documents", Map("from"->offset, "size"->size, "query"-> Map("query_string" -> Map("query" -> q))))
+      r <- query("documents", Map("from"->offset, "size"->size, "query"-> Map("query_string" -> Map("query" -> q)),"sort" -> Map("_timestamp" -> Map("order" -> "desc"))))
     } yield (SearchResult.apply _)
       .tupled(
         r.partition(
@@ -81,10 +81,11 @@ object EsRepository {
               (m.map(_.convert[Article]), n.map(_.convert[Report]))
           })
 
-  def fieldAgg(field: String): Future[List[Map[String, Any]]] =
+  def fieldAgg(query:String, field: String): Future[List[Map[String, Any]]] =
     for {
-      r <- aggs("documents", Map("aggs"->
-        Map("result" ->
+      r <- aggs("documents", Map(
+        "query" -> Map("query_string" -> Map("query" -> query)),
+        "aggs"-> Map("result" ->
           Map("terms" ->
             Map("field" -> field)
             )
@@ -94,7 +95,7 @@ object EsRepository {
     } yield r
 
   def tryCreateIndex() = {
-    println("creating index ....")
+    logger.info("creating index ....")
     createIndex(Map("settings" -> Map(
       "number_of_shards" -> 1,
       "number_of_replicas" -> 1

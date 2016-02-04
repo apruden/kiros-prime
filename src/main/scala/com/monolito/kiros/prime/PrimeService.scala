@@ -143,20 +143,19 @@ trait PrimeService extends HttpService with CORSSupport { self: MyAppContextAwar
               }
         }
       } ~
+        path ("agg") {
+          get {
+            parameters('query.as[String], 'field.as[String]) {
+              (query, field) => complete(getAgg(query, field)(appContext))
+            }
+          }
+        } ~
       path("search") {
         pathEnd {
           get {
             parameters('offset.as[Int] ? 0, 'length.as[Int] ? 20, 'query.as[String]) {
               (offset, length, query) =>
                 complete(search(query, offset, length)(appContext))
-            }
-          }
-        } ~
-        pathPrefix ("agg") {
-          get {
-            parameters('field.as[String]) {
-              field =>
-                complete(getAgg(field)(appContext))
             }
           }
         }
@@ -266,10 +265,10 @@ trait PrimeService extends HttpService with CORSSupport { self: MyAppContextAwar
       } yield r
     }
 
-  def getAgg(field: String): MyAppContext #> List[Map[String, Any]] =
+  def getAgg(query: String, field: String): MyAppContext #> List[Map[String, Any]] =
     ReaderTFuture { ctx =>
       for {
-        r <- fieldAgg(field)
+        r <- fieldAgg(query, field)
       } yield r
     }
 

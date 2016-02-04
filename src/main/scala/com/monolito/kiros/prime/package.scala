@@ -12,9 +12,12 @@ import spray.routing.authentication._
 import spray.http.HttpHeaders._
 import shapeless._
 import com.typesafe.config._
+import org.slf4j.LoggerFactory
+import ch.qos.logback.classic.LoggerContext
 
 package object prime {
   val conf = ConfigFactory.load()
+  val logger = LoggerFactory.getLogger("prime")
 
   type OAuth2Authenticator[T] = Option[String] => Future[Option[T]]
 
