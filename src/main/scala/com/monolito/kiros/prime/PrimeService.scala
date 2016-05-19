@@ -134,6 +134,14 @@ trait PrimeService extends HttpService with CORSSupport { self: MyAppContextAwar
       pathSingleSlash {
         getFromFile(List(rootPath,"index.html").mkString("/"))
       } ~
+      path ("conf") {
+        complete {
+          Map("files" -> conf.getString("kiros.services.files"),
+            "auth" -> conf.getString("kiros.services.auth"),
+            "search" -> conf.getString("kiros.services.search"),
+            "prime" -> conf.getString("kiros.services.prime"))
+        }
+      } ~
       cors {
       path("assets")  {
           entity(as[MultipartFormData]) { formData =>

@@ -1,5 +1,7 @@
 package com.monolito.kiros.prime
 
+import scala.language.higherKinds
+
 import scala.concurrent.Future
 import scala.util.Try
 import scala.concurrent.ExecutionContext.Implicits.global
