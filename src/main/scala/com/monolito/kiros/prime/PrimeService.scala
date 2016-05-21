@@ -1,48 +1,43 @@
 package com.monolito.kiros.prime
 
 import java.io._
+import akka.util.Timeout
+import scala.concurrent.duration._
 import scala.concurrent._
-import scala.concurrent.ExecutionContext.Implicits.global
 import scala.util.Try
 import com.monolito.kiros.prime.data._
 import com.monolito.kiros.prime.data.EsRepository._
 import com.monolito.kiros.prime.model._
-import akka.actor.Actor
-import spray.http._
-import spray.http.MediaTypes._
-import spray.httpx.unmarshalling._
-import spray.json._
-import spray.json.DefaultJsonProtocol._
-import spray.routing._
-import scalaz._
-import Scalaz._
-import scalaz.OptionT._
-import spray.routing.authentication._
-import spray.http.HttpHeaders._
-import shapeless._
-import spray.http.StatusCodes.Forbidden
-
-import spray.http.{HttpMethods, HttpMethod, HttpResponse, AllOrigins}
-import spray.http.HttpHeaders._
-import spray.http.HttpMethods._
-
-import spray.httpx.marshalling.Marshaller
-
-import SprayJsonSupport._
+import akka.actor.ActorSystem
+import akka.actor.Props
+import akka.http.scaladsl.server.Directives._
+import akka.http.scaladsl.server.Directive1
+import akka.stream.ActorMaterializer
+import akka.stream.scaladsl.FileIO
 
 import com.fasterxml.uuid.Generators
+import spray.json._
+import scalaz._
+import Scalaz.{get => _, put => _, _}
+
+import com.monolito.kiros.commons.CorsSupport
+import akka.http.scaladsl.model.Multipart.FormData
+import akka.http.scaladsl.model.Multipart.FormData.BodyPart
+import akka.http.scaladsl.model.HttpHeader
+import akka.http.scaladsl.model.headers._
+import akka.http.scaladsl.model._
+
+import akka.http.scaladsl.server.Directive
+import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport
+import akka.http.scaladsl.marshalling._
+import akka.http.scaladsl.model.HttpResponse
+import akka.stream.scaladsl.FileIO
+import akka.stream.scaladsl.StreamConverters
+import java.util.concurrent.TimeUnit
+import akka.http.scaladsl.server.directives.Credentials.Provided
 
 
-class PrimeServiceActor extends Actor with PrimeService with ProdMyAppContextAware {
-  import CustomRejectionHandler._
-
-  def actorRefFactory = context
-
-  def receive = runRoute(wikiRoutes)
-}
-
-object WikiJsonProtocol extends DefaultJsonProtocol {
-  //implicit declaration order matters
+object WikiJsonProtocol {
   implicit object InstantJsonFormat extends RootJsonFormat[java.time.Instant] {
     def write(c: java.time.Instant) = {
       val a = java.time.LocalDateTime.ofInstant(c, java.time.ZoneId.of("GMT"))
@@ -75,25 +70,6 @@ object WikiJsonProtocol extends DefaultJsonProtocol {
       case o: JsObject => o.fields.map(e => (e._1, read(e._2)))
     }
   }
-
-  implicit val userFormat = jsonFormat2(User)
-  implicit val attachmentFormat = jsonFormat3(Attachment)
-  implicit val commentFormat = jsonFormat7(Comment)
-  implicit val activityFormat = jsonFormat2(Activity)
-  implicit val blockerFormat = jsonFormat1(Blocker)
-  implicit val articleFormat = jsonFormat10(Article)
-  implicit val reportFormat = jsonFormat12(Report)
-  implicit val resultFormat = jsonFormat2(SearchResult)
-
-  /*implicit object AnyJsonFormat extends JsonFormat[Any] {
-    def write(x: Any) = x match {
-      case n: Int => JsNumber(n)
-      case s: String => JsString(s)
-      case x => JsString(x.toString)
-    }
-
-    def read(value: JsValue) = ???
-  }*/
 }
 
 trait MyAppContextAware {
@@ -114,159 +90,197 @@ trait ProdMyAppContextAware extends MyAppContextAware {
   val appContext = new EsMyAppContext
 }
 
-trait PrimeService extends HttpService with CORSSupport { self: MyAppContextAware =>
+trait PrimeService extends CorsSupport with SprayJsonSupport with OAuth2Support { self: MyAppContextAware =>
+  import spray.json.DefaultJsonProtocol._
   import WikiJsonProtocol._
   import com.monolito.kiros.prime.conf
+  implicit val timeout = Timeout(5.seconds)
+  implicit val system = ActorSystem("on-spray-can")
+  implicit val executionContext = system.dispatcher
+  implicit val materializer = ActorMaterializer()
+  implicit val userFormat = jsonFormat2(User)
+  implicit val attachmentFormat = jsonFormat3(Attachment)
+  implicit val commentFormat = jsonFormat7(Comment)
+  implicit val activityFormat = jsonFormat2(Activity)
+  implicit val blockerFormat = jsonFormat1(Blocker)
+  implicit val articleFormat = jsonFormat10(Article)
+  implicit val reportFormat = jsonFormat12(Report)
+  implicit val resultFormat = jsonFormat2(SearchResult)
+  
+  tryCreateIndex()
+  
+  override val corsAllowOrigins: List[String] = List("*")
+
+  override val corsAllowedHeaders: List[String] = List("Origin",
+      "X-Requested-With",
+      "Content-Type",
+      "Accept",
+      "Authorization",
+      "Accept-Encoding",
+      "Accept-Language",
+      "Host",
+      "Referer",
+      "User-Agent")
+
+  override val corsAllowCredentials: Boolean = true
+
+  override val optionsCorsHeaders: List[HttpHeader] = List[HttpHeader](
+    `Access-Control-Allow-Headers`(corsAllowedHeaders.mkString(", ")),
+    `Access-Control-Max-Age`(60 * 60 * 24 * 20),
+    `Access-Control-Allow-Credentials`(corsAllowCredentials))
+ 
   val rootPath = conf.getString("kiros.prime.root-path")
   val generator = Generators.timeBasedGenerator()
   val appContext: MyAppContext
 
-  val authenticated: Directive1[OAuthCred] = authenticate(OAuth2Auth(validateToken, "prime"))
-
-  val authorized: List[String] => Directive1[OAuthCred] = (scope:List[String]) => authenticated.hflatMap {
-    case c :: HNil =>  {
-      if (c.anyScope(scope)) provide(c) else reject
+  val authenticator: String => AsyncAuthenticator[OAuthCred] = (scope) => 
+    (credentials) => credentials match {
+      case Provided(identifier) => validateToken(Some(identifier), scope)
+      case _ => Future.successful(None)
     }
-    case _ => reject
-  }
-
-  val wikiRoutes = getFromDirectory (rootPath) ~
-      pathSingleSlash {
-        getFromFile(List(rootPath,"index.html").mkString("/"))
-      } ~
-      path ("conf") {
-        complete {
-          Map("files" -> conf.getString("kiros.services.files"),
-            "auth" -> conf.getString("kiros.services.auth"),
-            "search" -> conf.getString("kiros.services.search"),
-            "prime" -> conf.getString("kiros.services.prime"))
+  
+  val wikiRoutes = getFromDirectory(rootPath) ~
+    pathSingleSlash {
+      getFromFile(List(rootPath, "index.html").mkString("/"))
+    } ~
+    path("conf") {
+       complete(Map("files" -> conf.getString("kiros.services.files"),
+          "auth" -> conf.getString("kiros.services.auth"),
+          "search" -> conf.getString("kiros.services.search"),
+          "prime" -> conf.getString("kiros.services.prime")))
+    } ~
+    cors {
+      path("assets") {
+        entity(as[FormData]) { formData =>
+          onComplete(saveAttachment(formData)) {
+            case scala.util.Success(fileNames) => complete(Map("fileNames" -> fileNames))
+            case scala.util.Failure(ex) => complete(s"Error saving files ${ex.getMessage}")
+          }
         }
       } ~
-      cors {
-      path("assets")  {
-          entity(as[MultipartFormData]) { formData =>
-              onComplete (saveAttachment(formData)) {
-                case scala.util.Success(fileNames) => complete(JsObject("fileNames" -> new JsArray(fileNames.map(JsString(_)).toVector)))
-                case scala.util.Failure(ex) => complete (StatusCodes.InternalServerError, s"Error saving files ${ex.getMessage}")
-              }
-        }
-      } ~
-        path ("agg") {
+        path("agg") {
           get {
             parameters('query.as[String], 'field.as[String]) {
               (query, field) => complete(getAgg(query, field)(appContext))
             }
           }
         } ~
-      path("search") {
-        pathEnd {
-          get {
-            parameters('offset.as[Int] ? 0, 'length.as[Int] ? 20, 'query.as[String]) {
-              (offset, length, query) =>
-                complete(search(query, offset, length)(appContext))
+        path("search") {
+          pathEnd {
+            get {
+              parameters('offset.as[Int] ? 0, 'length.as[Int] ? 20, 'query.as[String]) {
+                (offset, length, query) =>
+                  complete(search(query, offset, length)(appContext))
+              }
             }
           }
-        }
-      } ~
-      pathPrefix("articles") {
-        pathEnd {
-          (post | put) {
-            authorized(List("prime")) {
-              cred => {
-                entity(as[Article]) {
-                  article =>
-                    onSuccess(saveOrUpdateArticle(article, cred)(appContext)) {
+        } ~
+        pathPrefix("articles") {
+          pathEnd {
+            (post | put) {
+              authenticateOAuth2Async("", authenticator("prime")) {
+                cred =>
+                  {
+                    entity(as[Article]) {
+                      article =>
+                        onSuccess(saveOrUpdateArticle(article, cred)(appContext)) {
+                          _ => complete("OK")
+                        }
+                    }
+                  }
+              }
+            } ~
+              get {
+                parameters('offset.as[Int] ? 0, 'length.as[Int] ? 20, 'query.as[String] ?) {
+                  (offset, length, query) =>
+                    authenticateOAuth2Async("", authenticator("prime")) {
+                      _ => complete(searchArticles(offset, length, query)(appContext))
+                    }
+                }
+              }
+          } ~
+            pathPrefix(Segment) { articleId =>
+              pathEnd {
+                delete {
+                  authenticateOAuth2Async("", authenticator("prime_admin")) {
+                    _ =>
+                      onSuccess(deleteArticle(articleId)(appContext)) {
+                        _ => complete("OK")
+                      }
+                  }
+                } ~
+                  get {
+                    complete(getArticle(articleId)(appContext))
+                  }
+              }
+            }
+        } ~
+        pathPrefix("comments") {
+          pathEnd {
+            post {
+              authenticateOAuth2Async("", authenticator("prime")) { _ =>
+                entity(as[Comment]) { comment =>
+                  onSuccess(addComment(comment)(appContext)) { _ =>
+                    complete("OK")
+                  }
+                }
+              }
+            }
+          } ~
+            pathPrefix(Segment) { commentId =>
+              delete {
+                authenticateOAuth2Async("", authenticator("prime")) {
+                  _ =>
+                    onSuccess(deleteComment(commentId)(appContext)) {
                       _ => complete("OK")
                     }
                 }
               }
             }
-          } ~
-          get {
-            parameters('offset.as[Int] ? 0, 'length.as[Int] ? 20, 'query.as[String] ? ) {
-              (offset, length, query) => authorized(List("prime")) {
-                  _ => complete(searchArticles(offset, length, query)(appContext))
-                }
-            }
-          }
         } ~
-        pathPrefix(Segment) { articleId =>
+        pathPrefix("reports") {
           pathEnd {
-            delete {
-              authorized(List("prime_admin")) {
-                _ => onSuccess(deleteArticle(articleId)(appContext)) {
-                  _ => complete("OK")
-                }
+            (post | put) {
+              authenticateOAuth2Async("", authenticator("prime")) {
+                cred =>
+                  {
+                    entity(as[Report]) {
+                      report =>
+                        onSuccess(saveOrUpdateReport(report, cred)(appContext)) {
+                          _ => complete("OK")
+                        }
+                    }
+                  }
               }
             } ~
-            get {
-              complete(getArticle(articleId)(appContext))
-            }
-          }
-        }
-      } ~
-      pathPrefix ("comments") {
-        pathEnd {
-          post {
-            authorized(List("prime")) { _ =>
-              entity(as[Comment]) {comment =>
-                onSuccess(addComment(comment)(appContext)) { _ =>
-                  complete("OK")
-                }
-              }
-            }
-          }
-        } ~
-        pathPrefix (Segment) { commentId =>
-          delete {
-            authorized(List("prime")) {
-              _ => onSuccess(deleteComment(commentId)(appContext)) {
-                _ => complete ("OK")
-              }
-            }
-          }
-        }
-      } ~
-      pathPrefix("reports") {
-        pathEnd {
-          (post | put) {
-            authorized(List("prime")) {
-              cred => {
-                entity(as[Report]) {
-                  report =>
-                    onSuccess(saveOrUpdateReport(report, cred)(appContext)) {
-                      _ => complete("OK")
+              get {
+                parameters('offset.as[Int] ? 0, 'length.as[Int] ? 20, 'query.as[String] ?) {
+                  (offset, length, query) =>
+                    authenticateOAuth2Async("", authenticator("prime")) {
+                      _ => complete(searchReports(offset, length, query)(appContext))
                     }
                 }
               }
-            }
           } ~
-          get {
-            parameters('offset.as[Int] ? 0, 'length.as[Int] ? 20, 'query.as[String] ? ) {
-              (offset, length, query) => authorized(List("prime")) {
-                  _ => complete(searchReports(offset, length, query)(appContext))
-                }
-            }
-          }
-        } ~
-        pathPrefix(Segment) { reportId =>
-          pathEnd {
-            delete {
-              authorized(List("prime_admin")) {
-                _ => onSuccess(deleteReport(reportId)(appContext)) {
-                  _ => complete("OK")
-                }
+            pathPrefix(Segment) { reportId =>
+              pathEnd {
+                delete {
+                  authenticateOAuth2Async("", authenticator("prime_admin")) {
+                    _ =>
+                      onSuccess(deleteReport(reportId)(appContext)) {
+                        _ => complete("OK")
+                      }
+                  }
+                } ~
+                  get {
+                    complete(getReport(reportId)(appContext))
+                  }
               }
-            } ~
-            get {
-              complete(getReport(reportId)(appContext))
             }
-          }
         }
-      }
     }
 
-  def search(q: String, offset: Int = 0, size:Int = 20): MyAppContext #> SearchResult =
+  def search(q: String, offset: Int = 0, size: Int = 20): MyAppContext #> SearchResult =
     ReaderTFuture { ctx =>
       for {
         r <- esQuery(q, offset, size)
@@ -280,14 +294,14 @@ trait PrimeService extends HttpService with CORSSupport { self: MyAppContextAwar
       } yield r
     }
 
-  def addComment(comment:Comment): MyAppContext #> Try[Unit] = {
+  def addComment(comment: Comment): MyAppContext #> Try[Unit] = {
     val commentToSave = if (comment.id == "") comment.copy(id = generator.generate().toString) else comment
     ReaderTFuture { ctx: MyAppContext =>
       for {
         r <- if (comment.targetType == "article")
-                ctx.articles.updateComment(comment.targetId, commentToSave)
-             else
-                ctx.reports.updateComment(comment.targetId, commentToSave)
+          ctx.articles.updateComment(comment.targetId, commentToSave)
+        else
+          ctx.reports.updateComment(comment.targetId, commentToSave)
       } yield r
     }
   }
@@ -301,10 +315,10 @@ trait PrimeService extends HttpService with CORSSupport { self: MyAppContextAwar
     ReaderTFuture(ctx => ctx.articles.find(id))
 
   def saveOrUpdateArticle(article: Article, cred: OAuthCred): MyAppContext #> Try[Unit] = {
-    if (article.id != "" &&  cred.id =/= article.modifiedBy.userId )
+    if (article.id != "" && cred.id =/= article.modifiedBy.userId)
       throw new Exception("Unauthorized Error")
 
-    val articleToSave = article.copy(id=if (article.id == "") generator.generate().toString else article.id, modified=java.time.Instant.now)
+    val articleToSave = article.copy(id = if (article.id == "") generator.generate().toString else article.id, modified = java.time.Instant.now)
 
     for {
       c <- ReaderTFuture { (ctx: MyAppContext) => ctx.articles.save(articleToSave) }
@@ -314,46 +328,24 @@ trait PrimeService extends HttpService with CORSSupport { self: MyAppContextAwar
   def deleteArticle(id: String): MyAppContext #> Try[Unit] =
     ReaderTFuture { (r: MyAppContext) => r.articles.del(id) }
 
-  def saveAttachment(formData: MultipartFormData): Future[List[String]] = {
-    val fileNames = formData.fields.map {
-      case bp: BodyPart =>
-        val savedFilename = generator.generate().toString
-        for {
-          r <- saveAttachment(savedFilename, bp.filename, bp.entity.data.toByteArray)
-          q <- Future.successful { savedFilename }
-        } yield q
-        //saveAttachment(savedFilename, new ByteArrayInputStream(bp.entity.data.toByteArray), bp.filename)
-    }
+  def saveAttachment(formData: FormData): Future[List[String]] = {
+    val res = formData.parts.map(bodyPart =>
+      (bodyPart.entity.dataBytes.runWith(StreamConverters.asInputStream(FiniteDuration(3, TimeUnit.SECONDS))), bodyPart.filename)).map((x: (InputStream, Option[String])) => {
+      val savedFilename = generator.generate().toString
+      var ba = Stream.continually(x._1.read).takeWhile(_ != -1).map(_.toByte).toArray
+      saveAttachment(savedFilename, x._2, ba)
+      savedFilename
+    })
 
-    Future.sequence(fileNames.toList)
+    res.runFold(List[String]())((x: List[String], y: String) => y :: x)
   }
 
-  private def saveAttachment(savedFilename: String, fileName: Option[String], content: Array[Byte]): Future[Unit] = {
+  private def saveAttachment(savedFilename: String, fileName: Option[String], content: Array[Byte]): Future[Any] = {
     import java.nio.file.Files
     import java.nio.file.Paths
     import S3Client._
-
     putObject(savedFilename, content, Files.probeContentType(Paths.get(fileName.getOrElse("filename.bin").toLowerCase)))
   }
-
-  private def saveAttachment(fileName: String, content: InputStream, filename: Option[String]): Boolean =
-    saveAttachment[InputStream](fileName, content, {(is, os) =>
-      val buffer = new Array[Byte](16384)
-      Iterator
-        .continually (is.read(buffer))
-        .takeWhile (-1 !=)
-        .foreach (os.write(buffer, 0, _))
-    })
-
-  private def saveAttachment[T](fileName: String, content: T, writeFile: (T, OutputStream) => Unit): Boolean =
-    try {
-      val fos = new java.io.FileOutputStream(conf.getString("kiros.prime.temp-path") + fileName)
-      writeFile(content, fos)
-      fos.close()
-      true
-    } catch {
-      case _ : Exception => false
-    }
 
   def searchReports(offset: Int, length: Int, query: Option[String]): MyAppContext #> List[Report] =
     ReaderTFuture(ctx => ctx.reports.findAll(offset, length, query))
@@ -362,7 +354,7 @@ trait PrimeService extends HttpService with CORSSupport { self: MyAppContextAwar
     ReaderTFuture(ctx => ctx.reports.find(id))
 
   def saveOrUpdateReport(report: Report, cred: OAuthCred): MyAppContext #> Try[Unit] = {
-    val reportToSave = report.copy(id=if (report.id == "") generator.generate().toString else report.id, modified=java.time.Instant.now)
+    val reportToSave = report.copy(id = if (report.id == "") generator.generate().toString else report.id, modified = java.time.Instant.now)
 
     for {
       c <- ReaderTFuture { (ctx: MyAppContext) => ctx.reports.save(reportToSave) }

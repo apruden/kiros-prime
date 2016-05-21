@@ -2,15 +2,24 @@ package com.monolito.kiros.prime
 
 import akka.actor.ActorSystem
 import akka.io.IO
-import spray.http._
-import spray.client.pipelining._
-import spray.httpx.encoding.{Gzip, Deflate}
 import spray.json._
 import spray.json.DefaultJsonProtocol._
 import spray.json.{JsonFormat, DefaultJsonProtocol}
-import spray.httpx.SprayJsonSupport._
 import scala.concurrent.Future
 import scala.util._
+import akka.http.scaladsl.model.HttpRequest
+import akka.http.scaladsl.model.ContentTypes
+import akka.http.scaladsl.model.HttpMethods
+import akka.http.scaladsl.Http
+import akka.http.scaladsl.model.HttpEntity
+import akka.util.ByteString
+import akka.http.scaladsl.marshalling.Marshal
+import akka.stream.ActorMaterializer
+import akka.http.scaladsl.unmarshalling.Unmarshal
+import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport
+import akka.http.scaladsl.model.RequestEntity
+import akka.http.scaladsl.marshalling.PredefinedToEntityMarshallers
+
 
 object EsJsonProtocol extends DefaultJsonProtocol {
   implicit object AnyJsonFormat extends JsonFormat[Any] {
@@ -35,40 +44,39 @@ object EsJsonProtocol extends DefaultJsonProtocol {
   }
 }
 
-object EsClient {
+
+object EsClient extends SprayJsonSupport with PredefinedToEntityMarshallers{
+  import EsJsonProtocol._
   import com.monolito.kiros.prime.conf
   import concurrent.ExecutionContext.Implicits._
-  import SprayJsonSupport._
-  import EsJsonProtocol._
-
   implicit val system = ActorSystem()
-
+  implicit val materializer = ActorMaterializer()
   val hostRoot = conf.getString("kiros.prime.index-root")
   val host = conf.getString("kiros.prime.index-url")
+ 
 
-  val pipeline: HttpRequest => Future[Map[String, Any]] = sendReceive ~> unmarshal[Map[String,Any]]
+  def createIndex (mapping: Map[String, Any]): Future[Any] =
+    for {
+      req <- Marshal(mapping).to[RequestEntity]
+      resp <- Http().singleRequest(HttpRequest(uri = host, method=HttpMethods.POST, entity=req))
+    } yield resp
 
-  def createIndex (mapping: Map[String, Any]): Future[Unit] =
-  for {
-    a <- pipeline { Post(host, mapping)}
-    r <- Future {()}
-  } yield r
+  def esSave (idx: String, typ: String, document: Map[String, Any]): Future[Any] =
+    for {
+      req <- Marshal(document).to[RequestEntity]
+      resp <- Http().singleRequest(HttpRequest(uri = s"$hostRoot/$idx/$typ", method=HttpMethods.POST, entity=req))
+    } yield resp
 
-  def esSave (idx: String, typ: String, document: Map[String, Any]): Future[Unit] =
-  for {
-    a <- pipeline { Post(s"$hostRoot/$idx/$typ", document) }
-    r <- Future {()}
-  } yield r
-
-  def put (typ: String, id: String, document: Map[String, Any]): Future[Unit] =
-  for {
-    a <- pipeline { Put(s"$host/$typ/$id", document) }
-    r <- Future {()}
-  } yield r
+  def put (typ: String, id: String, document: Map[String, Any]): Future[Any] =
+    for {
+      req <- Marshal(document).to[RequestEntity]
+      resp <- Http().singleRequest(HttpRequest(uri = s"$hostRoot/$typ/$id", method=HttpMethods.PUT, entity=req))
+    } yield resp
 
   def get (typ: String, id: String): Future[Option[Map[String, Any]]] =
     for {
-      d <- pipeline { Get(s"$host/$typ/$id") }
+      resp <- Http().singleRequest(HttpRequest(uri=s"$host/$typ/$id", method=HttpMethods.GET))
+      d <- Unmarshal(resp.entity).to[Map[String, Any]]
       r <- Future { d.get("_source").asInstanceOf[Option[Map[String, Any]]]
         .flatMap(e => Some(e + ("_version" -> d.getOrElse("_version", 1)))) }
     } yield r
@@ -77,7 +85,9 @@ object EsClient {
 
   def query (typ: String, query: Map[String, Any]): Future[List[Map[String, Any]]] = {
     for {
-      d <- pipeline { Post(s"$host/$typ/_search", query + ("version" -> true) )}
+      req <- Marshal(query + ("version" -> true)).to[RequestEntity]
+      resp <- Http().singleRequest(HttpRequest(uri=s"$host/$typ/_search", method=HttpMethods.POST, entity=req))
+      d <- Unmarshal(resp.entity).to[Map[String, Any]]
       r <- Future {
         d.getOrElse("hits", Map()).asInstanceOf[Map[String, Any]]
           .getOrElse("hits", List()).asInstanceOf[Seq[Map[String, Any]]]
@@ -88,7 +98,9 @@ object EsClient {
 
   def aggs (typ: String, query: Map[String, Any]): Future[List[Map[String, Any]]] = {
     for {
-      d <- pipeline { Post(s"$host/$typ/_search", query) }
+      req <- Marshal(query).to[RequestEntity]
+      resp <- Http().singleRequest(HttpRequest(uri=s"$host/$typ/_search", method=HttpMethods.POST, entity=req))
+      d <- Unmarshal(resp.entity).to[Map[String, Any]]
       r <- Future {
         d.getOrElse("aggregations", Map()).asInstanceOf[Map[String, Any]].getOrElse("result", Map()).asInstanceOf[Map[String, Any]].getOrElse("buckets", List()).asInstanceOf[Seq[Map[String, Any]]].toList
       }

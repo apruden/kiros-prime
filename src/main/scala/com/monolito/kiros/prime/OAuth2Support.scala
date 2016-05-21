@@ -1,37 +1,34 @@
 package com.monolito.kiros.prime
 
-import scala.concurrent._
-import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.Future
 
-import spray.http._
-import spray.routing._
-import spray.http.MediaTypes._
-import spray.http.HttpHeaders._
-import spray.http.HttpMethods._
-import spray.routing.authentication._
-
-
-class OAuth2HttpAuthenticator[U](val realm: String, val oauth2Authenticator: OAuth2Authenticator[U])(implicit val executionContext: ExecutionContext)
-extends HttpAuthenticator[U] {
-
-  def authenticate(credentials: Option[HttpCredentials], ctx: RequestContext) =
-    oauth2Authenticator {
-      credentials.flatMap {
-        case OAuth2BearerToken(token) => Some(token)
+trait OAuth2Support {
+  def validateToken(tok: Option[String], scope: String): Future[Option[OAuthCred]] = {
+    import java.util.Base64
+    val cred = if (tok.nonEmpty) {
+      new String(Base64.getDecoder.decode(tok.get), "UTF-8").split('|').toList match {
+        case List(data, hmac) =>
+          data.split(':').toList match {
+            case List(uid, scopes, expire) => {
+              if (true)
+                Some(OAuthCred(uid, scopes.split(' ').toList, expire.toLong))
+              else
+                None
+            }
+            case _ => None
+          }
         case _ => None
       }
+    } else None
+
+    Future.successful { cred match {
+      case cred: Some[OAuthCred] => if(cred.get.anyScope(List(scope))) cred else None
+      case _ => None
+      }
     }
-
-  def getChallengeHeaders(httpRequest: HttpRequest) =
-    `WWW-Authenticate`(HttpChallenge(scheme = "Bearer", realm = realm, params = Map.empty)) :: Nil
-
+  }
 }
 
-case class OAuthCred(id: String, scopes:List[String], expire: Long) {
+case class OAuthCred(id: String, scopes: List[String], expire: Long) {
   def anyScope(requiredScopes: List[String]): Boolean = !scopes.intersect(requiredScopes).isEmpty
-}
-
-object OAuth2Auth {
-  def apply[T](authenticator: OAuth2Authenticator[T], realm: String)(implicit ec: ExecutionContext) =
-    new OAuth2HttpAuthenticator[T](realm, authenticator)
 }

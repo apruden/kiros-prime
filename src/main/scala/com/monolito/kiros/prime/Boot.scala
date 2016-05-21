@@ -1,25 +1,18 @@
 package com.monolito.kiros.prime
 
-import akka.actor.{ ActorSystem, Props }
-import akka.io.IO
-import spray.can.Http
-import akka.pattern.ask
-import akka.util.Timeout
-import scala.concurrent.duration._
-import spray.io.ServerSSLEngineProvider
+import akka.http.scaladsl.Http
+import akka.http.scaladsl.server.RouteResult.route2HandlerFlow
+import com.typesafe.config.ConfigFactory
 
 
-object Boot extends App { //with PrimeSslConfiguration {
+object Boot extends App with PrimeService with ProdMyAppContextAware { //with PrimeSslConfiguration {
   import com.monolito.kiros.prime.conf
   import data.EsRepository._
 
-  implicit val system = ActorSystem("on-spray-can")
-
-  val service = system.actorOf(Props[PrimeServiceActor], "kiros-prime-service")
-
-  implicit val timeout = Timeout(5.seconds)
-
-  tryCreateIndex()
-
-  IO(Http) ? Http.Bind(service, interface = conf.getString("kiros.prime.host"), port = conf.getInt("kiros.prime.port"))
+  val (host, port) = (conf.getString("kiros.prime.host"), conf.getInt("kiros.prime.port"))
+  val bindingFuture = Http().bindAndHandle(handler=wikiRoutes, host, port) //, serverContext)
+  println(s"Server online at http://$host:$port/ ...")
+  sys.addShutdownHook(() => bindingFuture
+    .flatMap(_.unbind())
+    .onComplete(_ => system.terminate()))
 }
