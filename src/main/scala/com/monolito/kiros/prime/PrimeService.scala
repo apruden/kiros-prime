@@ -34,7 +34,8 @@ import akka.http.scaladsl.model.HttpResponse
 import akka.stream.scaladsl.FileIO
 import akka.stream.scaladsl.StreamConverters
 import java.util.concurrent.TimeUnit
-import akka.http.scaladsl.server.directives.Credentials.Provided
+import com.monolito.kiros.commons.OAuthCred
+import com.monolito.kiros.commons.OAuth2Support
 
 
 object WikiJsonProtocol {
@@ -109,36 +110,10 @@ trait PrimeService extends CorsSupport with SprayJsonSupport with OAuth2Support 
   
   tryCreateIndex()
   
-  override val corsAllowOrigins: List[String] = List("*")
-
-  override val corsAllowedHeaders: List[String] = List("Origin",
-      "X-Requested-With",
-      "Content-Type",
-      "Accept",
-      "Authorization",
-      "Accept-Encoding",
-      "Accept-Language",
-      "Host",
-      "Referer",
-      "User-Agent")
-
-  override val corsAllowCredentials: Boolean = true
-
-  override val optionsCorsHeaders: List[HttpHeader] = List[HttpHeader](
-    `Access-Control-Allow-Headers`(corsAllowedHeaders.mkString(", ")),
-    `Access-Control-Max-Age`(60 * 60 * 24 * 20),
-    `Access-Control-Allow-Credentials`(corsAllowCredentials))
- 
   val rootPath = conf.getString("kiros.prime.root-path")
   val generator = Generators.timeBasedGenerator()
   val appContext: MyAppContext
 
-  val authenticator: String => AsyncAuthenticator[OAuthCred] = (scope) => 
-    (credentials) => credentials match {
-      case Provided(identifier) => validateToken(Some(identifier), scope)
-      case _ => Future.successful(None)
-    }
-  
   val wikiRoutes = getFromDirectory(rootPath) ~
     pathSingleSlash {
       getFromFile(List(rootPath, "index.html").mkString("/"))

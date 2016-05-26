@@ -42,7 +42,8 @@ resolvers ++= Seq(
 
 mappings in (Compile, packageBin) ~= {_.filter (!_._1.getName.equals("application.conf"))}
 
-lazy val root = (project in file(".")).enablePlugins(SbtTwirl)
+lazy val core = RootProject(file("../kiros-commons"))
+lazy val root = (project in file(".")).enablePlugins(SbtTwirl).dependsOn(core)
 
 lazy val buildSettings = Seq(
   version := "0.1-SNAPSHOT",
