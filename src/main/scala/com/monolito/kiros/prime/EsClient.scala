@@ -51,8 +51,8 @@ object EsClient extends SprayJsonSupport with PredefinedToEntityMarshallers{
   import concurrent.ExecutionContext.Implicits._
   implicit val system = ActorSystem()
   implicit val materializer = ActorMaterializer()
-  val hostRoot = conf.getString("kiros.prime.index-root")
-  val host = conf.getString("kiros.prime.index-url")
+  val hostRoot = conf.getString("kiros.index-root")
+  val host = conf.getString("kiros.index-url")
  
 
   def createIndex (mapping: Map[String, Any]): Future[Any] =
