@@ -9,6 +9,7 @@ import scala.util.Try
 import scala.collection.JavaConversions._
 import scala.collection.JavaConverters._
 import java.time.Instant
+import com.monolito.kiros.commons.EsClient
 
 trait Repository[T] {
   def find(tid: String): Future[Option[T]]

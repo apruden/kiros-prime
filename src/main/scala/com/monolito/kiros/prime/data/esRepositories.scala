@@ -8,6 +8,7 @@ import scala.collection.JavaConverters._
 import com.monolito.kiros.prime._
 import com.monolito.kiros.prime.model._
 import java.time.Instant
+import com.monolito.kiros.commons.EsClient
 
 
 class EsArticleRepository extends EsRepository[Article] with ArticleRepository {
