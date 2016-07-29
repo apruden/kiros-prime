@@ -18,6 +18,37 @@ trait Repository[T] {
   def del(id: String): Future[Try[Unit]]
 }
 
+trait BeatRepository extends Repository[Beat] {
+  import EsClient._
+
+  def find(tid: String): Future[Option[Beat]] = ???
+
+  def findAll(offset: Int, limit: Int, query:Option[String]=None): Future[List[Beat]] = ???
+
+  def save(t: Beat): Future[Try[Unit]] = {
+    for {
+      c <- esSave("prime", "beats", t.map)
+    } yield scala.util.Success(())
+  }
+
+  def getAggregation(query: String): Future[List[Map[String, Any]]] =
+    for {
+      r <- aggs("beats", Map(
+        "query" -> Map("query_string" -> Map("query" -> query)),
+        "aggs"-> Map("presence" -> Map(
+          "date_histogram" -> Map("interval"->"day", "field"->"_timestamp"),
+          "aggs" -> Map("min_timestamp" ->
+            Map("min" ->
+              Map("field" -> "_timestamp")),
+            "max_timestamp" ->
+            Map("max" ->
+              Map("field" -> "_timestamp"))
+            )))))
+    } yield r
+
+  def del(id: String): Future[Try[Unit]] = ???
+}
+
 trait ArticleRepository extends Repository[Article] {
   def updateComment(id: String, comment: Comment): Future[Try[Unit]]
 
@@ -102,6 +133,13 @@ object EsRepository {
       "number_of_replicas" -> 1
       ),
       "mappings" -> Map(
+        "beats" -> Map(
+          "_timestamp" -> Map ("enabled" -> true),
+          "properties" -> Map(
+            "id" -> Map("type" -> "string", "index"-> "not_analyzed"),
+            "timestamp" -> Map("type" -> "integer", "index"-> "not_analyzed")
+            )
+          ),
         "documents" -> Map(
           "_timestamp" -> Map ("enabled" -> true),
           "date_detection" -> true,

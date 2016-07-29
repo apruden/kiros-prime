@@ -80,11 +80,13 @@ trait MyAppContextAware {
 trait MyAppContext {
   val articles: ArticleRepository
   val reports: ReportRepository
+  val beats: BeatRepository
 }
 
 class EsMyAppContext extends MyAppContext {
   val articles = new EsArticleRepository
   val reports = new EsReportRepository
+  val beats = new EsBeatRepository
 }
 
 trait ProdMyAppContextAware extends MyAppContextAware {
@@ -102,6 +104,7 @@ trait PrimeService extends CorsSupport with SprayJsonSupport with OAuth2Support 
   implicit val userFormat = jsonFormat2(User)
   implicit val attachmentFormat = jsonFormat3(Attachment)
   implicit val commentFormat = jsonFormat7(Comment)
+  implicit val beatFormat = jsonFormat2(Beat)
   implicit val activityFormat = jsonFormat2(Activity)
   implicit val blockerFormat = jsonFormat1(Blocker)
   implicit val articleFormat = jsonFormat10(Article)
@@ -124,6 +127,22 @@ trait PrimeService extends CorsSupport with SprayJsonSupport with OAuth2Support 
           "search" -> conf.getString("kiros.services.search"),
           "prime" -> conf.getString("kiros.services.prime")))
     } ~
+    path("beats") {
+      post {
+        entity(as[Beat]) { beat =>
+          onSuccess(addBeat(beat)(appContext)) { _ =>
+            complete("OK")
+          }
+        }
+      } ~
+      path ("_aggs") {
+        get {
+          parameters('query.as[String]) {
+            (query) => complete(getBeatsAgg(query)(appContext))
+          }
+        }
+      }
+    } ~
     cors {
       path("assets") {
         entity(as[FormData]) { formData =>
@@ -133,14 +152,14 @@ trait PrimeService extends CorsSupport with SprayJsonSupport with OAuth2Support 
           }
         }
       } ~
-        path("agg") {
+        path("_aggs") {
           get {
             parameters('query.as[String], 'field.as[String]) {
               (query, field) => complete(getAgg(query, field)(appContext))
             }
           }
         } ~
-        path("search") {
+        path("_search") {
           pathEnd {
             get {
               parameters('offset.as[Int] ? 0, 'length.as[Int] ? 20, 'query.as[String]) {
@@ -277,6 +296,22 @@ trait PrimeService extends CorsSupport with SprayJsonSupport with OAuth2Support 
           ctx.articles.updateComment(comment.targetId, commentToSave)
         else
           ctx.reports.updateComment(comment.targetId, commentToSave)
+      } yield r
+    }
+  }
+
+  def addBeat(beat: Beat): MyAppContext #> Try[Unit] = {
+    ReaderTFuture { ctx: MyAppContext =>
+      for {
+         r <- ctx.beats.save(beat)
+      } yield r
+    }
+  }
+
+  def getBeatsAgg(query: String): MyAppContext #> List[Map[String, Any]] = {
+    ReaderTFuture { ctx: MyAppContext =>
+      for {
+         r <- ctx.beats.getAggregation(query)
       } yield r
     }
   }

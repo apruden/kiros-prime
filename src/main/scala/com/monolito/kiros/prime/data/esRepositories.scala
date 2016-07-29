@@ -11,6 +11,13 @@ import java.time.Instant
 import com.monolito.kiros.commons.EsClient
 
 
+class EsBeatRepository extends BeatRepository {
+  import com.monolito.kiros.prime.data._
+
+  implicit val mapper = mapperBeat
+}
+
+
 class EsArticleRepository extends EsRepository[Article] with ArticleRepository {
   import EsClient._
   import com.monolito.kiros.prime.data._

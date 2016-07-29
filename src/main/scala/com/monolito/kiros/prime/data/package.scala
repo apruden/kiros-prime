@@ -82,4 +82,10 @@ package object data {
         v.get("attachments").get.asInstanceOf[Seq[Map[String, Any]]].toList.map {_.convert[Attachment]}
       )
   }
+
+  implicit val mapperBeat: MapConvert[Beat] = new MapConvert[Beat] {
+    def conv(v: Map[String, Any]): Beat = 
+      Beat(v.get("id").get.toString, v.get("timestamp").get.asInstanceOf[Long])
+  }
+
 }
