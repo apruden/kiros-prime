@@ -85,7 +85,10 @@ package object data {
 
   implicit val mapperBeat: MapConvert[Beat] = new MapConvert[Beat] {
     def conv(v: Map[String, Any]): Beat = 
-      Beat(v.get("id").get.toString, v.get("timestamp").get.asInstanceOf[Long])
+      Beat(
+        v.get("id").get.toString,
+        Instant.parse(v.get("timestamp").get.toString)
+      )
   }
 
 }

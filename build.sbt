@@ -12,12 +12,12 @@ libraryDependencies ++= {
   val akkaV = "2.4.4"
   val specs2V = "2.4.16"
   Seq(
-	"com.typesafe.akka" %% "akka-actor" % "2.3.11",
-	"com.typesafe.akka" %% "akka-http-experimental" % akkaV,
-	"com.typesafe.akka" %% "akka-http-spray-json-experimental" % akkaV,
-	"com.typesafe.akka" %% "akka-stream" % akkaV,
-	"com.typesafe.akka" %% "akka-stream-testkit" % akkaV,
-	"com.typesafe.akka" %% "akka-testkit" % "2.3.11" % "test",
+    "com.typesafe.akka" %% "akka-actor" % "2.3.11",
+    "com.typesafe.akka" %% "akka-http-experimental" % akkaV,
+    "com.typesafe.akka" %% "akka-http-spray-json-experimental" % akkaV,
+    "com.typesafe.akka" %% "akka-stream" % akkaV,
+    "com.typesafe.akka" %% "akka-stream-testkit" % akkaV,
+    "com.typesafe.akka" %% "akka-testkit" % "2.3.11" % "test",
     "org.specs2"          %%  "specs2-core"    % specs2V % "test",
     "org.specs2"          %%  "specs2-junit"   % specs2V % "test",
     "org.specs2"          %%  "specs2-mock"    % specs2V % "test",

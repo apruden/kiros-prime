@@ -35,15 +35,25 @@ trait BeatRepository extends Repository[Beat] {
     for {
       r <- aggs("beats", Map(
         "query" -> Map("query_string" -> Map("query" -> query)),
-        "aggs"-> Map("presence" -> Map(
-          "date_histogram" -> Map("interval"->"day", "field"->"_timestamp"),
-          "aggs" -> Map("min_timestamp" ->
-            Map("min" ->
-              Map("field" -> "_timestamp")),
-            "max_timestamp" ->
-            Map("max" ->
-              Map("field" -> "_timestamp"))
-            )))))
+        "aggs"-> Map(
+          "result" -> Map(
+            "date_histogram" -> Map("interval"->"day", "field"->"timestamp"),
+            "aggs" -> Map(
+              "presence" -> Map(
+                "terms" -> Map("field" -> "id"),
+                "aggs" -> Map(
+                  "min_timestamp" -> Map(
+                    "min" -> Map("field" -> "timestamp")
+                  ),
+                  "max_timestamp" -> Map(
+                    "max" -> Map("field" -> "timestamp")
+                  )
+                )
+              )
+            )
+          )
+        )
+      ))
     } yield r
 
   def del(id: String): Future[Try[Unit]] = ???
@@ -75,14 +85,14 @@ trait EsRepository[T<:Entity] extends Repository[T] {
   def find(tid: String): Future[Option[T]] =
     for {
       m <- get (docType, tid)
-      r <- query ("comments", Map( "query" -> Map("term" -> Map ("targetId" -> tid)), "sort" -> Map("_timestamp" -> Map("order" -> "desc"))))
+      r <- query ("comments", Map( "query" -> Map("term" -> Map ("targetId" -> tid)), "sort" -> Map("modified" -> Map("order" -> "desc"))))
       z <- Future.successful { (m.get + ("comments" -> r)).convert[T] }
     } yield Some(z)
 
   def findAll(offset: Int, limit: Int, q:Option[String]=None): Future[List[T]] =
       for {
-        c <- query(docType, Map("from"->offset, "size"->limit, "query" -> Map("term" -> Map ("typeId" -> typeId)), "sort" -> Map("_timestamp" -> Map("order" -> "desc"))))
-        u <- query("comments", Map("query" -> Map("terms" -> Map("targetId" -> c.map(_.get("id").get))), "sort" -> Map("_timestamp" -> Map("order" -> "desc")) ))
+        c <- query(docType, Map("from"->offset, "size"->limit, "query" -> Map("term" -> Map ("typeId" -> typeId)), "sort" -> Map("modified" -> Map("order" -> "desc"))))
+        u <- query("comments", Map("query" -> Map("terms" -> Map("targetId" -> c.map(_.get("id").get))), "sort" -> Map("modified" -> Map("order" -> "desc")) ))
         x <- Future.successful { c.map(h => {
           val xx = u.filter(_.get("targetId") == h.get("id"))
           h + ("comments" -> xx )
@@ -104,7 +114,7 @@ object EsRepository {
 
   def esQuery(q: String, offset: Int, size: Int): Future[SearchResult] =
     for {
-      r <- query("documents", Map("from"->offset, "size"->size, "query"-> Map("query_string" -> Map("query" -> q)),"sort" -> Map("_timestamp" -> Map("order" -> "desc"))))
+      r <- query("documents", Map("from"->offset, "size"->size, "query"-> Map("query_string" -> Map("query" -> q)),"sort" -> Map("modified" -> Map("order" -> "desc"))))
     } yield (SearchResult.apply _)
       .tupled(
         r.partition(
@@ -128,50 +138,53 @@ object EsRepository {
 
   def tryCreateIndex() = {
     logger.info("creating index ....")
-    createIndex(Map("settings" -> Map(
-      "number_of_shards" -> 1,
-      "number_of_replicas" -> 1
+    createIndex(Map(
+      "settings" -> Map(
+        "number_of_shards" -> 1,
+        "number_of_replicas" -> 1
       ),
       "mappings" -> Map(
         "beats" -> Map(
-          "_timestamp" -> Map ("enabled" -> true),
           "properties" -> Map(
             "id" -> Map("type" -> "string", "index"-> "not_analyzed"),
-            "timestamp" -> Map("type" -> "integer", "index"-> "not_analyzed")
-            )
-          ),
+            "timestamp" -> Map("type" -> "date", "index"-> "not_analyzed")
+          )
+        ),
         "documents" -> Map(
-          "_timestamp" -> Map ("enabled" -> true),
           "date_detection" -> true,
           "dynamic_date_formats" -> "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'",
           "properties" -> Map(
             "id" -> Map("type" -> "string", "index"-> "not_analyzed"),
+            "modified" -> Map("type" -> "date", "index"-> "not_analyzed"),
             "typedId" -> Map("type" -> "string", "index"-> "not_analyzed"),
-            "modifiedBy" -> Map("type" -> "object",
-                "properties" -> Map(
-                  "userId" -> Map("type" -> "string", "index"-> "not_analyzed"),
-                  "username" -> Map("type" -> "string", "index"-> "not_analyzed")
-                  )
-              ),
-            "attachments" -> Map("type" -> "nested",
-                "properties" -> Map(
-                  "id" -> Map("type" -> "string", "index"-> "not_analyzed")
-                  )
+            "modifiedBy" -> Map(
+              "type" -> "object",
+              "properties" -> Map(
+                "userId" -> Map("type" -> "string", "index"-> "not_analyzed"),
+                "username" -> Map("type" -> "string", "index"-> "not_analyzed")
               )
+            ),
+            "attachments" -> Map(
+              "type" -> "nested",
+              "properties" -> Map(
+                "id" -> Map("type" -> "string", "index"-> "not_analyzed")
+              )
+            )
           )
         ),
         "comments" -> Map(
-          "_timestamp" -> Map ("enabled" -> true),
           "date_detection" -> true,
           "dynamic_date_formats" -> "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'",
           "properties" -> Map(
             "id" -> Map("type" -> "string", "index"-> "not_analyzed"),
             "targetId" -> Map("type" -> "string", "index"-> "not_analyzed"),
-            "modifiedBy" -> Map("type" -> "object",
-                "properties" -> Map(
-                  "userId" -> Map("type" -> "string", "index"-> "not_analyzed"),
-                  "username" -> Map("type" -> "string", "index"-> "not_analyzed")
-                  )
+            "modified" -> Map("type" -> "date", "index"-> "not_analyzed"),
+            "modifiedBy" -> Map(
+              "type" -> "object",
+              "properties" -> Map(
+                "userId" -> Map("type" -> "string", "index"-> "not_analyzed"),
+                "username" -> Map("type" -> "string", "index"-> "not_analyzed")
+              )
             )
           )
         )

@@ -36,7 +36,10 @@ import akka.stream.scaladsl.StreamConverters
 import java.util.concurrent.TimeUnit
 import com.monolito.kiros.commons.OAuthCred
 import com.monolito.kiros.commons.OAuth2Support
-
+import com.typesafe.config.Config
+import com.typesafe.config.ConfigObject
+import com.typesafe.config.ConfigValue
+import scala.collection.JavaConverters._
 
 object WikiJsonProtocol {
   implicit object InstantJsonFormat extends RootJsonFormat[java.time.Instant] {
@@ -71,6 +74,7 @@ object WikiJsonProtocol {
       case o: JsObject => o.fields.map(e => (e._1, read(e._2)))
     }
   }
+
 }
 
 trait MyAppContextAware {
@@ -110,9 +114,9 @@ trait PrimeService extends CorsSupport with SprayJsonSupport with OAuth2Support 
   implicit val articleFormat = jsonFormat10(Article)
   implicit val reportFormat = jsonFormat12(Report)
   implicit val resultFormat = jsonFormat2(SearchResult)
-  
+
   tryCreateIndex()
-  
+
   val rootPath = conf.getString("kiros.prime.root-path")
   val generator = Generators.timeBasedGenerator()
   val appContext: MyAppContext
@@ -122,28 +126,34 @@ trait PrimeService extends CorsSupport with SprayJsonSupport with OAuth2Support 
       getFromFile(List(rootPath, "index.html").mkString("/"))
     } ~
     path("conf") {
-       complete(Map("files" -> conf.getString("kiros.services.files"),
-          "auth" -> conf.getString("kiros.services.auth"),
-          "search" -> conf.getString("kiros.services.search"),
-          "prime" -> conf.getString("kiros.services.prime")))
+      def inner(c: Any): Any = c match {
+        case c:ConfigObject => c.entrySet.asScala.map(x => (x.getKey, inner(x.getValue))).toMap
+        case c:ConfigValue => inner(c.unwrapped)
+        case _ => c
+      }
+
+      val clientConfig = inner(conf.getObject("kiros.clientConfig")).asInstanceOf[Map[String, Any]]
+      complete(clientConfig)
     } ~
-    path("beats") {
-      post {
-        entity(as[Beat]) { beat =>
-          onSuccess(addBeat(beat)(appContext)) { _ =>
-            complete("OK")
+    cors {
+      pathPrefix("beats") {
+        pathEnd {
+          post {
+            entity(as[Beat]) { beat =>
+              onSuccess(addBeat(beat)(appContext)) { _ =>
+                complete("OK")
+              }
+            }
+          }
+        } ~
+        path ("_aggs") {
+          get {
+            parameters('q.as[String]) {
+              (q) => complete(getBeatsAgg(q)(appContext))
+            }
           }
         }
       } ~
-      path ("_aggs") {
-        get {
-          parameters('query.as[String]) {
-            (query) => complete(getBeatsAgg(query)(appContext))
-          }
-        }
-      }
-    } ~
-    cors {
       path("assets") {
         entity(as[FormData]) { formData =>
           onComplete(saveAttachment(formData)) {
@@ -301,9 +311,10 @@ trait PrimeService extends CorsSupport with SprayJsonSupport with OAuth2Support 
   }
 
   def addBeat(beat: Beat): MyAppContext #> Try[Unit] = {
+    val nowBeat = beat.copy(timestamp = java.time.Instant.now)
     ReaderTFuture { ctx: MyAppContext =>
       for {
-         r <- ctx.beats.save(beat)
+         r <- ctx.beats.save(nowBeat)
       } yield r
     }
   }

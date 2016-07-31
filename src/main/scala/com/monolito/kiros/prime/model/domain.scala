@@ -117,12 +117,12 @@ case class Comment (
   def getId = id
 }
 
-case class Beat (id: String, timestamp: Long) extends Entity {
+case class Beat (id: String, timestamp: Instant) extends Entity {
   def getId = id
 
   override def map = Map (
     "id" -> id,
-    "timestamp" -> timestamp
+    "timestamp" -> timestamp.toString
   )
 }
 
