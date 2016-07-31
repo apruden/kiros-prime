@@ -57,6 +57,7 @@ object WikiJsonProtocol {
   implicit object AnyJsonFormat extends JsonFormat[Any] {
     def write(x: Any) = x match {
       case n: Int => JsNumber(n)
+      case l: Long => JsNumber(l)
       case s: String => JsString(s)
       case b: Boolean => if (b) JsTrue else JsFalse
       case q: Seq[Any] => JsArray(q.map(write(_)).toVector)
@@ -65,7 +66,7 @@ object WikiJsonProtocol {
     }
 
     def read(value: JsValue): Any = value match {
-      case JsNumber(n) => n.intValue()
+      case JsNumber(n) => if(n.intValue() == n.longValue()) n.intValue else n.longValue
       case JsString(s) => s
       case JsTrue => true
       case JsFalse => false
