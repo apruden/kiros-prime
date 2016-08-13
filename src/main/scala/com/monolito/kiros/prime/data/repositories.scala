@@ -27,13 +27,13 @@ trait BeatRepository extends Repository[Beat] {
 
   def save(t: Beat): Future[Try[Unit]] = {
     for {
-      c <- esSave("prime", "beats", t.map)
+      c <- esSave("beats", "beats", t.map)
     } yield scala.util.Success(())
   }
 
   def getAggregation(query: String): Future[List[Map[String, Any]]] =
     for {
-      r <- aggs("beats", Map(
+      r <- aggs("beats", "beats", Map(
         "query" -> Map("query_string" -> Map("query" -> query)),
         "aggs"-> Map(
           "result" -> Map(
@@ -84,25 +84,38 @@ trait EsRepository[T<:Entity] extends Repository[T] {
 
   def find(tid: String): Future[Option[T]] =
     for {
-      m <- get (docType, tid)
-      r <- query ("comments", Map( "query" -> Map("term" -> Map ("targetId" -> tid)), "sort" -> Map("modified" -> Map("order" -> "desc"))))
+      m <- get (indexName, docType, tid)
+      r <- query (indexName, "comments", Map(
+        "query" -> Map(
+          "term" -> Map("targetId" -> tid)),
+          "sort" -> Map("modified" -> Map("order" -> "desc"))))
       z <- Future.successful { (m.get + ("comments" -> r)).convert[T] }
     } yield Some(z)
 
   def findAll(offset: Int, limit: Int, q:Option[String]=None): Future[List[T]] =
       for {
-        c <- query(docType, Map("from"->offset, "size"->limit, "query" -> Map("term" -> Map ("typeId" -> typeId)), "sort" -> Map("modified" -> Map("order" -> "desc"))))
-        u <- query("comments", Map("query" -> Map("terms" -> Map("targetId" -> c.map(_.get("id").get))), "sort" -> Map("modified" -> Map("order" -> "desc")) ))
+        c <- query(indexName, docType, Map(
+          "from"->offset,
+          "size"->limit,
+          "query" -> Map(
+            "term" -> Map("typeId" -> typeId)),
+            "sort" -> Map("modified" -> Map("order" -> "desc"))
+          ))
+        u <- query(indexName, "comments", Map(
+          "query" -> Map(
+            "terms" -> Map("targetId" -> c.map(_.get("id").get))),
+            "sort" -> Map("modified" -> Map("order" -> "desc"))
+          ))
         x <- Future.successful { c.map(h => {
           val xx = u.filter(_.get("targetId") == h.get("id"))
           h + ("comments" -> xx )
-        }) }
+        })}
       } yield x.map(_.convert[T]).toList
 
   def save(t: T): Future[Try[Unit]] =
     for {
       x <- esSave("prime_rev", docType, t.map)
-      c <- put(docType, t.getId, t.map)
+      c <- put(indexName, docType, t.getId, t.map)
     } yield scala.util.Success(())
 
   def del(tid: String): Future[Try[Unit]] = ???
@@ -112,9 +125,15 @@ trait EsRepository[T<:Entity] extends Repository[T] {
 object EsRepository {
   import EsClient._
 
-  def esQuery(q: String, offset: Int, size: Int): Future[SearchResult] =
+  def esQuery(idx:String, q: String, offset: Int, size: Int): Future[SearchResult] =
     for {
-      r <- query("documents", Map("from"->offset, "size"->size, "query"-> Map("query_string" -> Map("query" -> q)),"sort" -> Map("modified" -> Map("order" -> "desc"))))
+      r <- query(idx, "documents", Map(
+        "from"->offset,
+        "size"->size,
+        "query"-> Map(
+          "query_string" -> Map("query" -> q)),
+          "sort" -> Map("modified" -> Map("order" -> "desc"))
+        ))
     } yield (SearchResult.apply _)
       .tupled(
         r.partition(
@@ -123,9 +142,9 @@ object EsRepository {
               (m.map(_.convert[Article]), n.map(_.convert[Report]))
           })
 
-  def fieldAgg(query:String, field: String): Future[List[Map[String, Any]]] =
+  def fieldAgg(idx:String, query:String, field: String): Future[List[Map[String, Any]]] =
     for {
-      r <- aggs("documents", Map(
+      r <- aggs(idx, "documents", Map(
         "query" -> Map("query_string" -> Map("query" -> query)),
         "aggs"-> Map("result" ->
           Map("terms" ->
@@ -137,8 +156,8 @@ object EsRepository {
     } yield r
 
   def tryCreateIndex() = {
-    logger.info("creating index ....")
-    createIndex(Map(
+    logger.info("Creating index ....")
+    createIndex("beats", Map(
       "settings" -> Map(
         "number_of_shards" -> 1,
         "number_of_replicas" -> 1
@@ -149,7 +168,15 @@ object EsRepository {
             "id" -> Map("type" -> "string", "index"-> "not_analyzed"),
             "timestamp" -> Map("type" -> "date", "index"-> "not_analyzed")
           )
-        ),
+        )
+      )
+    ))
+    createIndex("prime", Map(
+      "settings" -> Map(
+        "number_of_shards" -> 1,
+        "number_of_replicas" -> 1
+      ),
+      "mappings" -> Map(
         "documents" -> Map(
           "date_detection" -> true,
           "dynamic_date_formats" -> "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'",
@@ -189,8 +216,6 @@ object EsRepository {
           )
         )
       )
-    )
-  )
-    ()
+    ))
   }
 }

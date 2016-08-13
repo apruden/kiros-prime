@@ -288,14 +288,14 @@ trait PrimeService extends CorsSupport with SprayJsonSupport with OAuth2Support 
   def search(q: String, offset: Int = 0, size: Int = 20): MyAppContext #> SearchResult =
     ReaderTFuture { ctx =>
       for {
-        r <- esQuery(q, offset, size)
+        r <- esQuery("prime", q, offset, size)
       } yield r
     }
 
   def getAgg(query: String, field: String): MyAppContext #> List[Map[String, Any]] =
     ReaderTFuture { ctx =>
       for {
-        r <- fieldAgg(query, field)
+        r <- fieldAgg("prime", query, field)
       } yield r
     }
 

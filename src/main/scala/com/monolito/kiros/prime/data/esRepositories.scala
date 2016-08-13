@@ -30,7 +30,7 @@ class EsArticleRepository extends EsRepository[Article] with ArticleRepository {
 
   def updateComment(articleId: String, comment: Comment): Future[Try[Unit]] =
     for {
-      r <- put("comments", comment.getId, comment.map)
+      r <- put(indexName, "comments", comment.getId, comment.map)
     } yield scala.util.Success(())
 
   def delComment(id: String, commentId: String): Future[Try[Unit]] = ???
@@ -48,7 +48,7 @@ class EsReportRepository extends EsRepository[Report] with ReportRepository {
 
   def updateComment(reportId: String, comment: Comment): Future[Try[Unit]] =
     for {
-      r <- put("comments", comment.getId, comment.map)
+      r <- put(indexName, "comments", comment.getId, comment.map)
     } yield scala.util.Success(())
 
   def delComment(id: String, commentId: String): Future[Try[Unit]] = ???
