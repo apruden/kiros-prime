@@ -156,10 +156,12 @@ trait PrimeService extends CorsSupport with SprayJsonSupport with OAuth2Support 
         }
       } ~
       path("assets") {
-        entity(as[FormData]) { formData =>
-          onComplete(saveAttachment(formData)) {
-            case scala.util.Success(fileNames) => complete(Map("fileNames" -> fileNames))
-            case scala.util.Failure(ex) => complete(s"Error saving files ${ex.getMessage}")
+        post {
+          entity(as[FormData]) { formData =>
+            onComplete(saveAttachment(formData)) {
+              case scala.util.Success(fileNames) => complete(Map("fileNames" -> fileNames))
+              case scala.util.Failure(ex) => complete(s"Error saving files ${ex.getMessage}")
+            }
           }
         }
       } ~
@@ -352,12 +354,14 @@ trait PrimeService extends CorsSupport with SprayJsonSupport with OAuth2Support 
 
   def saveAttachment(formData: FormData): Future[List[String]] = {
     val res = formData.parts.map(bodyPart =>
-      (bodyPart.entity.dataBytes.runWith(StreamConverters.asInputStream(FiniteDuration(3, TimeUnit.SECONDS))), bodyPart.filename)).map((x: (InputStream, Option[String])) => {
-      val savedFilename = generator.generate().toString
-      var ba = Stream.continually(x._1.read).takeWhile(_ != -1).map(_.toByte).toArray
-      saveAttachment(savedFilename, x._2, ba)
-      savedFilename
-    })
+        (bodyPart.entity.dataBytes.runWith(//
+          StreamConverters.asInputStream(FiniteDuration(3, TimeUnit.SECONDS))), bodyPart.filename)).map(//
+            (x: (InputStream, Option[String])) => {
+              val savedFilename = generator.generate().toString
+              var ba = Stream.continually(x._1.read).takeWhile(_ != -1).map(_.toByte).toArray
+              saveAttachment(savedFilename, x._2, ba)
+              savedFilename
+            })
 
     res.runFold(List[String]())((x: List[String], y: String) => y :: x)
   }
