@@ -2,7 +2,7 @@ package com.monolito.kiros.prime.model
 
 import java.time.Instant
 import scala.collection.JavaConverters._
-
+import com.monolito.kiros.prime.S3Client.getSignedUrl
 
 trait Entity {
   def getId: String
@@ -129,7 +129,8 @@ case class Beat (id: String, timestamp: Instant) extends Entity {
 case class Attachment (
   id: String,
   filename: String,
-  modified: Instant
+  modified: Instant,
+  downloadUrl: String
 ) extends Entity {
 
   def getId = id
@@ -137,7 +138,8 @@ case class Attachment (
   override def map = Map (
     "id" -> id,
     "filename" -> filename,
-    "modified" -> modified.toString
+    "modified" -> modified.toString,
+    "downloadUrl" -> getSignedUrl(id, filename)
     )
 }
 

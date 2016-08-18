@@ -3,6 +3,7 @@ package com.monolito.kiros.prime
 import scala.collection.JavaConversions._
 import scala.collection.JavaConverters._
 import com.monolito.kiros.prime.model._
+import com.monolito.kiros.prime.S3Client.getSignedUrl
 
 import java.time.Instant
 
@@ -19,7 +20,8 @@ package object data {
     def conv(values: Map[String, Any]): Attachment = Attachment(
       values.get("id").get.toString,
       values.get("filename").get.toString,
-      Instant.parse(values.get("modified").get.toString)
+      Instant.parse(values.get("modified").get.toString),
+      getSignedUrl(values.get("id").get.toString, values.get("filename").get.toString)
     )
   }
 

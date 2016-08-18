@@ -14,6 +14,7 @@ import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.server.Directive1
 import akka.stream.ActorMaterializer
 import akka.stream.scaladsl.FileIO
+import akka.util.ByteString
 
 import com.fasterxml.uuid.Generators
 import spray.json._
@@ -107,7 +108,7 @@ trait PrimeService extends CorsSupport with SprayJsonSupport with OAuth2Support 
   implicit val executionContext = system.dispatcher
   implicit val materializer = ActorMaterializer()
   implicit val userFormat = jsonFormat2(User)
-  implicit val attachmentFormat = jsonFormat3(Attachment)
+  implicit val attachmentFormat = jsonFormat4(Attachment)
   implicit val commentFormat = jsonFormat7(Comment)
   implicit val beatFormat = jsonFormat2(Beat)
   implicit val activityFormat = jsonFormat2(Activity)
@@ -353,20 +354,20 @@ trait PrimeService extends CorsSupport with SprayJsonSupport with OAuth2Support 
     ReaderTFuture { (r: MyAppContext) => r.articles.del(id) }
 
   def saveAttachment(formData: FormData): Future[List[String]] = {
-    val res = formData.parts.map(bodyPart =>
-        (bodyPart.entity.dataBytes.runWith(//
-          StreamConverters.asInputStream(FiniteDuration(3, TimeUnit.SECONDS))), bodyPart.filename)).map(//
-            (x: (InputStream, Option[String])) => {
-              val savedFilename = generator.generate().toString
-              var ba = Stream.continually(x._1.read).takeWhile(_ != -1).map(_.toByte).toArray
-              saveAttachment(savedFilename, x._2, ba)
-              savedFilename
-            })
+    formData.parts.mapAsync(1){ bodyPart => {
+      def toto(x:(Option[String], Array[Byte]), bs: ByteString): (Option[String], Array[Byte]) = {
+        val ba = bs.toArray
+        (bodyPart.filename , x._2 ++ ba)
+      }
 
-    res.runFold(List[String]())((x: List[String], y: String) => y :: x)
+      bodyPart.entity.dataBytes.runFold[(Option[String],Array[Byte])]((None, Array[Byte]()))(toto)
+    }
+    }.runFold(Future[List[String]]{List[String]()})((x:Future[List[String]], y: (Option[String], Array[Byte])) => {
+      saveAttachment(generator.generate().toString, y._1 , y._2).flatMap(f => x.map(z => f :: z))
+    }).flatMap(identity _)
   }
 
-  private def saveAttachment(savedFilename: String, fileName: Option[String], content: Array[Byte]): Future[Any] = {
+  private def saveAttachment(savedFilename: String, fileName: Option[String], content: Array[Byte]): Future[String] = {
     import java.nio.file.Files
     import java.nio.file.Paths
     import S3Client._

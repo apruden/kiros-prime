@@ -6,8 +6,11 @@ import akka.io.IO
 import java.security.MessageDigest
 import java.text.SimpleDateFormat
 import java.util.SimpleTimeZone
-import java.net.URL;
-import java.util.Date;
+import java.net.URL
+import java.util.Date
+import java.nio.charset.StandardCharsets
+import java.util.Base64
+import java.time.Instant
 
 import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
@@ -32,7 +35,7 @@ import akka.http.scaladsl.model.ContentTypes
 import akka.util.ByteString
 
 object AWS4Signer {
-  def urlEncode(url: String, keepPathSlash: Boolean) =
+  def urlEncode(url: String, keepPathSlash: Boolean = false) =
     try {
       if (keepPathSlash)
         URLEncoder.encode(url, "UTF-8").replace("%2F", "/")
@@ -204,15 +207,48 @@ object S3Client {
   implicit val system = ActorSystem()
   implicit val materializer = ActorMaterializer()
 
-  def putObject(key: String, obj: Array[Byte], contentType: String) = {
-    val endpointUrl = new URL(s"http://s3.amazonaws.com/$bucketName/$key")
+  def base64Encode(data: Array[Byte]): String =
+    Base64.getEncoder().encodeToString(data)
+
+  def sha1(data: String, key: String): Array[Byte] = {
+    val keySpec = new SecretKeySpec(key.getBytes(StandardCharsets.UTF_8), "HmacSHA1")
+    val mac = Mac.getInstance("HmacSHA1")
+    mac.init(keySpec)
+    mac.doFinal(data.getBytes(StandardCharsets.UTF_8))
+  }
+
+  def getSignedUrl(id: String, filename: String): String = {
+    val awsId = conf.getString("kiros.prime.aws-key-id")
+    val awsSecret = conf.getString("kiros.prime.aws-secret-key")
+    val disposition = "attachment;filename=\"" + filename + "\""
+    val expires = Instant.now().toEpochMilli / 1000 + 3600
+    val stringToSign = s"GET\n\n\n$expires\n/$bucketName/$id?response-content-disposition=$disposition"
+    val digest  = base64Encode(sha1(stringToSign, awsSecret))
+    val url = s"http://s3.amazonaws.com/$bucketName/$id"
+
+    s"$url?response-content-disposition=${urlEncode(disposition)}&AWSAccessKeyId=$awsId&Expires=$expires&Signature=${urlEncode(digest)}"
+  }
+
+
+  def putObject(key: String, obj: Array[Byte], contentType: String): Future[String] = {
+    val url = s"http://s3.amazonaws.com/$bucketName/$key"
+    //val url = s"http://localhost:8888/$bucketName/$key"
+    val endpointUrl = new URL(url)
     val headers = getHeaders(
           endpointUrl,
           conf.getString("kiros.prime.aws-key-id"),
           conf.getString("kiros.prime.aws-secret-key"),
           obj,
           contentType)
-    Http().singleRequest(HttpRequest(uri = "http://akka.io", method=HttpMethods.PUT, headers=headers, entity=HttpEntity.Strict(ContentTypes.`application/octet-stream`, ByteString(obj))))
+    Http().singleRequest(
+      HttpRequest(
+        uri = url,
+        method=HttpMethods.PUT,
+        headers=headers,
+        entity=HttpEntity.Strict(ContentTypes.`application/octet-stream`, ByteString(obj))
+      )).map(r => {
+        key
+      })
   }
 
   def getHeaders(endpointUrl: URL, awsAccessKey: String, awsSecretKey: String, objectContent: Array[Byte], contentType: String) = {
@@ -231,7 +267,7 @@ object S3Client {
 
     val headers = Map(
       "content-length" -> s"${objectContent.length}",
-      "content-type" -> s"$contentType",
+      "content-type" -> "application/octet-stream", //s"$contentType",
       "host" -> hostHeader,
       "x-amz-content-sha256" -> contentHashString,
       "x-amz-date" -> dateTimeStamp,
